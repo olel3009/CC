@@ -1727,8 +1727,36 @@ local function rawDown()
   return true
 end
 
+local function trySideBypassUp()
+  log("Nach oben blockiert. Versuche seitlich auszuweichen.")
+
+  local startHeading = heading
+  local directions = { 1, 3, 2, 0 }
+
+  for _,offset in ipairs(directions) do
+    face((startHeading + offset) % 4)
+
+    if rawForward(false, true) then
+      if rawUp() then
+        face(startHeading)
+        log("Aufwaerts-Ausweichroute erfolgreich.")
+        return true
+      end
+
+      face((heading + 2) % 4)
+      rawForward(false, true)
+    end
+
+    face(startHeading)
+  end
+
+  return false
+end
+
 local function up()
-  if not rawUp() then stop("Kann nicht nach oben fahren.") end
+  if rawUp() then return end
+  if trySideBypassUp() then return end
+  stop("Kann nicht nach oben fahren.")
 end
 
 local function down()
