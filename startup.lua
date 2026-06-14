@@ -20,6 +20,7 @@ local function updateMiner()
 
   log("Lade Miner von GitHub main.")
   log(url)
+  sleep(10)
 
   if fs.exists(UPDATE_FILE) then
     fs.delete(UPDATE_FILE)
