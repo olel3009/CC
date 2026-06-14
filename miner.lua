@@ -894,7 +894,6 @@ local function setup()
   mineMinZ = nil
   mineMaxZ = nil
 
-  local lowestY = CONFIG_LOWEST_Y
   heading = autoDetectStartHeading() or CONFIG_HEADING
   print("Startausrichtung: "..headingName(heading).." ("..heading..")")
 
@@ -910,8 +909,8 @@ local function setup()
     end
 
     miningMode = "normal"
-    local highestStartY = topY - MIN_START_DEPTH_BELOW_TOP
-    targetY = math.random(lowestY, highestStartY)
+    local lowestY, highestStartY
+    targetY, lowestY, highestStartY = chooseNormalTargetY(topY)
     print("Zufaellige Mining-Start-Y: "..targetY.." (zwischen "..lowestY.." und "..highestStartY..")")
   end
 
