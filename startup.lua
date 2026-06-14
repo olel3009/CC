@@ -1,4 +1,4 @@
-local PASTEBIN_ID = "DvSgprk5"
+local MINER_URL = "https://raw.githubusercontent.com/olel3009/CC/ae5389b36ca3ce4bee568f470be6b41f40a9dbfa/miner.lua"
 local MINER_FILE = "miner.lua"
 local UPDATE_FILE = "miner.lua.new"
 local BACKUP_FILE = "miner.lua.old"
@@ -8,13 +8,13 @@ local function log(msg)
 end
 
 local function updateMiner()
-  log("Lade Miner von Pastebin: "..PASTEBIN_ID)
+  log("Lade Miner von GitHub.")
 
   if fs.exists(UPDATE_FILE) then
     fs.delete(UPDATE_FILE)
   end
 
-  local ok = shell.run("pastebin", "get", PASTEBIN_ID, UPDATE_FILE)
+  local ok = shell.run("wget", MINER_URL, UPDATE_FILE)
 
   if ok and fs.exists(UPDATE_FILE) then
     if fs.exists(BACKUP_FILE) then
