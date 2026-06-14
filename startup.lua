@@ -1,4 +1,4 @@
-local MINER_URL = "https://raw.githubusercontent.com/olel3009/CC/ae5389b36ca3ce4bee568f470be6b41f40a9dbfa/miner.lua"
+local MINER_URL = "https://raw.githubusercontent.com/olel3009/CC/main/miner.lua"
 local MINER_FILE = "miner.lua"
 local UPDATE_FILE = "miner.lua.new"
 local BACKUP_FILE = "miner.lua.old"
