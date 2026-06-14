@@ -1753,9 +1753,13 @@ local function trySideBypassUp()
   return false
 end
 
+local function tryUpWithBypass()
+  if rawUp() then return true end
+  return trySideBypassUp()
+end
+
 local function up()
-  if rawUp() then return end
-  if trySideBypassUp() then return end
+  if tryUpWithBypass() then return end
   stop("Kann nicht nach oben fahren.")
 end
 
@@ -2321,7 +2325,7 @@ local function mineUpOreAndEnter()
   log("Ziel-Ore oben bestaetigt: "..data.name)
 
   if not digUpCanFail() then return false end
-  if not rawUp() then return false end
+  if not tryUpWithBypass() then return false end
 
   printValuables()
   mineAdjacentOres()
@@ -2435,7 +2439,7 @@ mineAdjacentOres = function()
     log("Vein-Ore unten gefunden: "..dataD.name)
 
     if mineDownOreAndEnter() then
-      rawUp()
+      tryUpWithBypass()
     end
   end
 
