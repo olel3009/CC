@@ -2,6 +2,7 @@ local MINER_URL = "https://raw.githubusercontent.com/olel3009/CC/main/miner.lua"
 local MINER_FILE = "miner.lua"
 local UPDATE_FILE = "miner.lua.new"
 local BACKUP_FILE = "miner.lua.old"
+local STATE_FILE = "miner_state"
 
 local function log(msg)
   print("[Startup] "..msg)
@@ -46,6 +47,13 @@ local function updateMiner()
   return fs.exists(MINER_FILE)
 end
 
+local function deleteMinerState()
+  if fs.exists(STATE_FILE) then
+    fs.delete(STATE_FILE)
+    log("Miner-State geloescht: "..STATE_FILE)
+  end
+end
+
 while true do
   if updateMiner() then
     local ok, err = pcall(function()
@@ -54,8 +62,10 @@ while true do
 
     if not ok then
       log("Miner crash: "..tostring(err))
+      deleteMinerState()
     else
       log("Miner beendet oder abgestuerzt ohne Lua-Fehler.")
+      deleteMinerState()
     end
   else
     log("Kein Miner vorhanden. Warte.")
