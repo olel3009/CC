@@ -7,14 +7,25 @@ local function log(msg)
   print("[Startup] "..msg)
 end
 
+local function minerDownloadUrl()
+  if os.epoch then
+    return MINER_URL.."?t="..tostring(os.epoch("utc"))
+  end
+
+  return MINER_URL
+end
+
 local function updateMiner()
-  log("Lade Miner von GitHub.")
+  local url = minerDownloadUrl()
+
+  log("Lade Miner von GitHub main.")
+  log(url)
 
   if fs.exists(UPDATE_FILE) then
     fs.delete(UPDATE_FILE)
   end
 
-  local ok = shell.run("wget", MINER_URL, UPDATE_FILE)
+  local ok = shell.run("wget", url, UPDATE_FILE)
 
   if ok and fs.exists(UPDATE_FILE) then
     if fs.exists(BACKUP_FILE) then
