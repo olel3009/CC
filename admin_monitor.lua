@@ -289,6 +289,22 @@ local function sortedMinerIds()
 end
 
 local function writeAt(target, x, y, text, fg, bg)
+  local w, h = target.getSize()
+  text = tostring(text or "")
+
+  if y < 1 or y > h or x > w or #text == 0 then return end
+
+  if x < 1 then
+    text = text:sub(2 - x)
+    x = 1
+  end
+
+  if x + #text - 1 > w then
+    text = text:sub(1, w - x + 1)
+  end
+
+  if #text == 0 then return end
+
   local oldFg = target.getTextColor()
   local oldBg = target.getBackgroundColor()
 
@@ -301,6 +317,29 @@ local function writeAt(target, x, y, text, fg, bg)
 end
 
 local function fill(target, x, y, w, h, bg)
+  local maxW, maxH = target.getSize()
+  if w <= 0 or h <= 0 or x > maxW or y > maxH then return end
+
+  if x < 1 then
+    w = w + x - 1
+    x = 1
+  end
+
+  if y < 1 then
+    h = h + y - 1
+    y = 1
+  end
+
+  if x + w - 1 > maxW then
+    w = maxW - x + 1
+  end
+
+  if y + h - 1 > maxH then
+    h = maxH - y + 1
+  end
+
+  if w <= 0 or h <= 0 then return end
+
   local oldBg = target.getBackgroundColor()
   target.setBackgroundColor(bg)
 
@@ -411,6 +450,24 @@ local function safeText(value, maxLen)
     return text:sub(1, maxLen)
   end
   return text
+end
+
+local function commandTarget()
+  if selectedMinerId and miners[selectedMinerId] then
+    return selectedMinerId
+  end
+
+  return "all"
+end
+
+local function commandScopeText()
+  local target = commandTarget()
+
+  if target == "all" then
+    return "ALL"
+  end
+
+  return "#"..tostring(target)
 end
 
 local function drawBar(target, x, y, w, pct, fillColor, bg, emptyColor)
@@ -548,26 +605,31 @@ local function drawMonitor()
   local actionY = 5
 
   fill(monitor, bx - 1, 1, 1, h, colors.gray)
-  writeAt(monitor, bx, 3, "COMMANDS", colors.lightGray, colors.black)
+  writeAt(monitor, bx, 3, "CMD "..safeText(commandScopeText(), buttonW - 4), colors.lightGray, colors.black)
 
-  addButton("start", "START ALL", bx, actionY, buttonW, 3, colors.green, colors.black, function()
-    queueCommand({ command="start", targetId="all" }, DEFAULT_DURATION)
+  addButton("scope", commandTarget() == "all" and "TARGET ALL" or "TARGET SEL", bx, actionY, buttonW, 3, colors.blue, colors.white, function()
+    selectedMinerId = nil
   end)
 
-  addButton("unload", "UNLOAD", bx, actionY + 4, buttonW, 3, colors.orange, colors.black, function()
-    queueCommand({ command="unload", targetId="all" }, DEFAULT_DURATION)
+  addButton("start", "START "..commandScopeText(), bx, actionY + 4, buttonW, 3, colors.green, colors.black, function()
+    queueCommand({ command="start", targetId=commandTarget() }, DEFAULT_DURATION)
   end)
 
-  addButton("refuel", "REFUEL", bx, actionY + 8, buttonW, 3, colors.cyan, colors.black, function()
-    queueCommand({ command="refuel", targetId="all" }, DEFAULT_DURATION)
+  addButton("unload", "UNLOAD "..commandScopeText(), bx, actionY + 8, buttonW, 3, colors.orange, colors.black, function()
+    queueCommand({ command="unload", targetId=commandTarget() }, DEFAULT_DURATION)
   end)
 
-  addButton("ping", "PING", bx, actionY + 12, buttonW, 3, colors.purple, colors.white, function()
-    queueCommand({ command="start", targetId="all" }, 20)
+  addButton("refuel", "REFUEL "..commandScopeText(), bx, actionY + 12, buttonW, 3, colors.cyan, colors.black, function()
+    queueCommand({ command="refuel", targetId=commandTarget() }, DEFAULT_DURATION)
   end)
 
-  addButton("clear", "CLEAR", bx, actionY + 16, buttonW, 3, colors.gray, colors.white, function()
+  addButton("ping", "PING "..commandScopeText(), bx, actionY + 16, buttonW, 3, colors.purple, colors.white, function()
+    queueCommand({ command="start", targetId=commandTarget() }, 20)
+  end)
+
+  addButton("clear", "CLEAR", bx, actionY + 20, buttonW, 3, colors.gray, colors.white, function()
     miners = {}
+    selectedMinerId = nil
   end)
 
   for _,button in ipairs(buttons) do
