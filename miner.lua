@@ -795,13 +795,18 @@ end
 
 local function chooseNormalTargetY(currentTopY)
   local lowestY = CONFIG_LOWEST_Y
-  local highestStartY = currentTopY - MIN_START_DEPTH_BELOW_TOP
+  local safeTopY = tonumber(currentTopY) or tonumber(y) or CONFIG_TOP_Y
+  local highestStartY = math.floor(safeTopY - MIN_START_DEPTH_BELOW_TOP)
+
+  lowestY = math.floor(lowestY)
 
   if highestStartY < lowestY then
     log("Start-Y ist zu tief fuer zufaellige Zielhoehe. Nutze aktuelle/naechste sichere Zielhoehe.")
 
-    if y < lowestY then
-      return y, y, y
+    local currentY = tonumber(y)
+    if currentY and currentY < lowestY then
+      currentY = math.floor(currentY)
+      return currentY, currentY, currentY
     end
 
     return lowestY, lowestY, lowestY
@@ -955,6 +960,7 @@ else
 end
 
 repairStartupEquipment()
+ensureTargetY()
 
 local function isOre(name)
   if not name then return false end
