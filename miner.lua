@@ -162,6 +162,7 @@ local function readTable(path)
   return data
 end
 
+local save
 local stop
 
 local function computerId()
@@ -792,7 +793,37 @@ local function fuelLimit()
   return 999999999
 end
 
-local function save()
+local function chooseNormalTargetY(currentTopY)
+  local lowestY = CONFIG_LOWEST_Y
+  local highestStartY = currentTopY - MIN_START_DEPTH_BELOW_TOP
+
+  if highestStartY < lowestY then
+    log("Start-Y ist zu tief fuer zufaellige Zielhoehe. Nutze aktuelle/naechste sichere Zielhoehe.")
+
+    if y < lowestY then
+      return y, y, y
+    end
+
+    return lowestY, lowestY, lowestY
+  end
+
+  return math.random(lowestY, highestStartY), lowestY, highestStartY
+end
+
+local function ensureTargetY()
+  if type(targetY) == "number" then return end
+
+  if miningMode == "netherite" then
+    targetY = CONFIG_NETHERITE_TARGET_Y
+  else
+    targetY = y or CONFIG_LOWEST_Y
+  end
+
+  log("Ziel-Y fehlte im State. Setze Ziel-Y auf "..targetY..".")
+  save()
+end
+
+save = function()
   writeTable(STATE, {
     version=STATE_VERSION,
     x=x,
