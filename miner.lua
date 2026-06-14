@@ -2164,7 +2164,12 @@ end
 
 local function goHorizontal(tx, tz)
   if y > targetY then
-    stop("Seitliche Bewegung ueber Ziel-Y blockiert.")
+    log("Seitliche Bewegung ueber Ziel-Y verhindert. Fahre zuerst runter zu Ziel-Y.")
+
+    while y > targetY do
+      down()
+      clean()
+    end
   end
 
   if x < tx then
