@@ -2564,6 +2564,81 @@ local function tooFarFromShaft()
   return not inMineArea(x, z)
 end
 
+local function randomMineTarget()
+  if mineMinX then
+    return math.random(mineMinX, mineMaxX), math.random(mineMinZ, mineMaxZ)
+  end
+
+  return math.random(mineCenterX - MAX_DISTANCE_FROM_SHAFT, mineCenterX + MAX_DISTANCE_FROM_SHAFT),
+    math.random(mineCenterZ - MAX_DISTANCE_FROM_SHAFT, mineCenterZ + MAX_DISTANCE_FROM_SHAFT)
+end
+
+local function travelRandomMoveAxis(target, isX)
+  local delta
+  local headingToFace
+
+  if isX then
+    delta = target - x
+    headingToFace = delta > 0 and 1 or 3
+  else
+    delta = target - z
+    headingToFace = delta > 0 and 2 or 0
+  end
+
+  local steps = math.abs(delta)
+  if steps == 0 then return 0, false end
+
+  face(headingToFace)
+
+  local moved = 0
+
+  while moved < steps do
+    ensureCanReturn()
+
+    local remaining = steps - moved
+
+    if not forwardTravel(remaining) then
+      log("Random-Ziel blockiert nach "..moved.." Bloecken.")
+      return moved, true
+    end
+
+    moved = moved + 1
+    clean()
+  end
+
+  return moved, false
+end
+
+local function travelRandomMoveTarget(tx, tz, firstAxisIsX)
+  local movedTotal = 0
+
+  if firstAxisIsX then
+    local movedX = travelRandomMoveAxis(tx, true)
+    movedTotal = movedTotal + movedX
+
+    if x == tx or movedX > 0 then
+      local movedZ = travelRandomMoveAxis(tz, false)
+      movedTotal = movedTotal + movedZ
+    elseif z ~= tz then
+      local movedZ = travelRandomMoveAxis(tz, false)
+      movedTotal = movedTotal + movedZ
+    end
+  else
+    local movedZ = travelRandomMoveAxis(tz, false)
+    movedTotal = movedTotal + movedZ
+
+    if z == tz or movedZ > 0 then
+      local movedX = travelRandomMoveAxis(tx, true)
+      movedTotal = movedTotal + movedX
+    elseif x ~= tx then
+      local movedX = travelRandomMoveAxis(tx, true)
+      movedTotal = movedTotal + movedX
+    end
+  end
+
+  return movedTotal
+end
+
 local function randomMove()
   ensureCanReturn()
 
@@ -2577,46 +2652,20 @@ local function randomMove()
     return
   end
 
-  for attempt=1,6 do
-    local h = math.random(0,3)
-    local dist = math.random(RANDOM_MOVE_MIN, RANDOM_MOVE_MAX)
-
-    local tx, tz = x, z
-
-    if h == 0 then
-      tz = z - dist
-    elseif h == 1 then
-      tx = x + dist
-    elseif h == 2 then
-      tz = z + dist
-    elseif h == 3 then
-      tx = x - dist
-    end
-
+  for _=1,8 do
+    local tx, tz = randomMineTarget()
     tx, tz = clampToMineArea(tx, tz)
 
-    if inMineArea(tx, tz) and (tx ~= x or tz ~= z) then
-      log("Kein Ore gefunden. Random Move: heading "..h..", Distanz "..dist)
-      face(h)
+    if tx ~= x or tz ~= z then
+      log("Keine Ores gefunden. Neues Random-Ziel: x="..tx.." y="..targetY.." z="..tz)
 
-      local moved = 0
+      local firstAxisIsX = math.random(0, 1) == 0
+      local moved = travelRandomMoveTarget(tx, tz, firstAxisIsX)
 
-      while moved < dist do
-        ensureCanReturn()
-
-        local remaining = dist - moved
-
-        if not forwardTravel(remaining) then
-          log("Random Move blockiert nach "..moved.." Bloecken.")
-          return
-        end
-
-        moved = moved + 1
-        clean()
+      if moved > 0 then
+        log("Random Move fertig. Position: x="..x.." y="..y.." z="..z)
+        return
       end
-
-      log("Random Move fertig. Position: x="..x.." y="..y.." z="..z)
-      return
     end
   end
 
