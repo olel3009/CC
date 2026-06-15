@@ -3,6 +3,7 @@ local MINER_FILE = "miner.lua"
 local UPDATE_FILE = "miner.lua.new"
 local BACKUP_FILE = "miner.lua.old"
 local STATE_FILE = "miner_state"
+local MIN_MINER_SIZE = 20000
 
 local function log(msg)
   print("[Startup] "..msg)
@@ -14,6 +15,24 @@ local function minerDownloadUrl()
   end
 
   return MINER_URL
+end
+
+local function validateMiner(path)
+  if not fs.exists(path) then
+    return false, "Datei fehlt"
+  end
+
+  local size = fs.getSize(path)
+  if size < MIN_MINER_SIZE then
+    return false, "Datei zu klein: "..tostring(size).." Bytes"
+  end
+
+  local program, err = loadfile(path)
+  if not program then
+    return false, "Lua-Syntaxfehler: "..tostring(err)
+  end
+
+  return true
 end
 
 local function updateMiner()
@@ -30,6 +49,14 @@ local function updateMiner()
   local ok = shell.run("wget", url, UPDATE_FILE)
 
   if ok and fs.exists(UPDATE_FILE) then
+    local valid, err = validateMiner(UPDATE_FILE)
+
+    if not valid then
+      log("Update verworfen: "..tostring(err))
+      fs.delete(UPDATE_FILE)
+      return validateMiner(MINER_FILE)
+    end
+
     if fs.exists(BACKUP_FILE) then
       fs.delete(BACKUP_FILE)
     end
@@ -44,7 +71,7 @@ local function updateMiner()
   end
 
   log("Update fehlgeschlagen. Nutze vorhandenen Miner.")
-  return fs.exists(MINER_FILE)
+  return validateMiner(MINER_FILE)
 end
 
 local function deleteMinerState()
@@ -54,11 +81,19 @@ local function deleteMinerState()
   end
 end
 
+local function runMiner()
+  local program, err = loadfile(MINER_FILE)
+
+  if not program then
+    return false, err
+  end
+
+  return pcall(program)
+end
+
 while true do
   if updateMiner() then
-    local ok, err = pcall(function()
-      shell.run(MINER_FILE)
-    end)
+    local ok, err = runMiner()
 
     if not ok then
       log("Miner crash: "..tostring(err))
