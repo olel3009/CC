@@ -267,7 +267,7 @@ local function isPickaxeItemName(name)
   return string.find(lowerName(name), "pickaxe", 1, true) ~= nil
 end
 
-local function isEnderStorageName(name)
+function isEnderStorageName(name)
   local lower = lowerName(name)
   return string.match(lower, "^enderstorage:") ~= nil
     or string.match(lower, "^ender_storage:") ~= nil
@@ -289,7 +289,7 @@ local function isEnderChestBlockName(name)
   return isEnderChestItemName(name)
 end
 
-local function isReservedEnderChestItemName(name)
+function isReservedEnderChestItemName(name)
   return isEnderChestItemName(name) or isEnderStorageName(name)
 end
 
@@ -1863,7 +1863,7 @@ local function forwardTravel(remaining)
   return tryBypassUp()
 end
 
-local function descendToTargetWithSidestep()
+function descendToTargetWithSidestep()
   local sidesteps = 0
 
   while y > targetY do
@@ -2578,7 +2578,7 @@ local function tooFarFromShaft()
   return not inMineArea(x, z)
 end
 
-local function randomMineTarget()
+function randomMineTarget()
   if mineMinX then
     return math.random(mineMinX, mineMaxX), math.random(mineMinZ, mineMaxZ)
   end
@@ -2587,7 +2587,7 @@ local function randomMineTarget()
     math.random(mineCenterZ - MAX_DISTANCE_FROM_SHAFT, mineCenterZ + MAX_DISTANCE_FROM_SHAFT)
 end
 
-local function chooseNewExplorationCenter()
+function chooseNewExplorationCenter()
   local tx, tz = randomMineTarget()
   tx, tz = clampToMineArea(tx, tz)
 
@@ -2603,7 +2603,7 @@ local function chooseNewExplorationCenter()
   return tx, tz
 end
 
-local function randomSpin()
+function randomSpin()
   local turns = math.random(0, 7)
 
   for _=1,turns do
@@ -2617,7 +2617,7 @@ local function randomSpin()
   end
 end
 
-local function travelRandomMoveAxis(target, isX)
+function travelRandomMoveAxis(target, isX)
   local delta
   local headingToFace
 
@@ -2653,30 +2653,25 @@ local function travelRandomMoveAxis(target, isX)
   return moved, false
 end
 
-local function travelRandomMoveTarget(tx, tz, firstAxisIsX)
+function travelRandomMoveTarget(tx, tz, firstAxisIsX)
   local movedTotal = 0
+  local moved
 
   if firstAxisIsX then
-    local movedX = travelRandomMoveAxis(tx, true)
-    movedTotal = movedTotal + movedX
+    moved = travelRandomMoveAxis(tx, true)
+    movedTotal = movedTotal + moved
 
-    if x == tx or movedX > 0 then
-      local movedZ = travelRandomMoveAxis(tz, false)
-      movedTotal = movedTotal + movedZ
-    elseif z ~= tz then
-      local movedZ = travelRandomMoveAxis(tz, false)
-      movedTotal = movedTotal + movedZ
+    if z ~= tz then
+      moved = travelRandomMoveAxis(tz, false)
+      movedTotal = movedTotal + moved
     end
   else
-    local movedZ = travelRandomMoveAxis(tz, false)
-    movedTotal = movedTotal + movedZ
+    moved = travelRandomMoveAxis(tz, false)
+    movedTotal = movedTotal + moved
 
-    if z == tz or movedZ > 0 then
-      local movedX = travelRandomMoveAxis(tx, true)
-      movedTotal = movedTotal + movedX
-    elseif x ~= tx then
-      local movedX = travelRandomMoveAxis(tx, true)
-      movedTotal = movedTotal + movedX
+    if x ~= tx then
+      moved = travelRandomMoveAxis(tx, true)
+      movedTotal = movedTotal + moved
     end
   end
 
@@ -2718,7 +2713,7 @@ local function randomMove()
   goHorizontal(mineCenterX,mineCenterZ)
 end
 
-local function isRecoverableMiningError(err)
+function isRecoverableMiningError(err)
   local text = tostring(err or "")
 
   return string.find(text, "blockiert", 1, true) ~= nil
@@ -2730,7 +2725,7 @@ local function isRecoverableMiningError(err)
     or string.find(text, "Kann nicht zurueck fahren", 1, true) ~= nil
 end
 
-local function miningLoopStep()
+function miningLoopStep()
   sendMinuteStatusIfDue()
   clean()
   ensureCanReturn()
