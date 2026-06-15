@@ -297,11 +297,7 @@ local function isEnderChestItemName(name)
 end
 
 local function isEnderChestBlockName(name)
-  if isEnderStorageName(name) then
-    return false
-  end
-
-  return isEnderChestItemName(name)
+  return isEnderChestItemName(name) or isEnderStorageName(name)
 end
 
 function isReservedEnderChestItemName(name)
