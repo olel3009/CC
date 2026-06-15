@@ -2379,7 +2379,83 @@ local function goHorizontal(tx, tz)
     end
   end
 
-  local function travelDirect(targetX, targetZ)
+  tx, tz = nearestPointInMineArea(tx, tz)
+
+  local function travelAxis(target, isX)
+    if isX then
+      if x < target then
+        face(1)
+        while x < target do
+          local remaining = target - x
+          if not forwardTravel(remaining) then return false, "Weg nach Osten blockiert." end
+          clean()
+        end
+      elseif x > target then
+        face(3)
+        while x > target do
+          local remaining = x - target
+          if not forwardTravel(remaining) then return false, "Weg nach Westen blockiert." end
+          clean()
+        end
+      end
+    else
+      if z < target then
+        face(2)
+        while z < target do
+          local remaining = target - z
+          if not forwardTravel(remaining) then return false, "Weg nach Sueden blockiert." end
+          clean()
+        end
+      elseif z > target then
+        face(0)
+        while z > target do
+          local remaining = z - target
+          if not forwardTravel(remaining) then return false, "Weg nach Norden blockiert." end
+          clean()
+        end
+      end
+    end
+
+    return true
+  end
+
+  local function travelDirect(targetX, targetZ, firstAxisIsX)
+    local ok, err
+
+    if firstAxisIsX then
+      ok, err = travelAxis(targetX, true)
+      if not ok then return false, err end
+      return travelAxis(targetZ, false)
+    end
+
+    ok, err = travelAxis(targetZ, false)
+    if not ok then return false, err end
+    return travelAxis(targetX, true)
+  end
+
+  local function travelWithFallback(targetX, targetZ)
+    local startX, startZ = x, z
+    local firstAxisIsX = math.abs(targetX - x) >= math.abs(targetZ - z)
+    local ok, err = travelDirect(targetX, targetZ, firstAxisIsX)
+
+    if ok then return true end
+
+    if x ~= startX or z ~= startZ then
+      return false, err
+    end
+
+    log(tostring(err).." Versuche andere Achse zuerst.")
+    return travelDirect(targetX, targetZ, not firstAxisIsX)
+  end
+
+  local function travelOrStop(targetX, targetZ)
+    local ok, err = travelWithFallback(targetX, targetZ)
+    if not ok then stop(err or "Horizontaler Weg blockiert.") end
+  end
+
+  -- Legacy direct travel kept unreachable for reference? 
+  -- no-op
+  if false then
     if x < targetX then
       face(1)
       while x < targetX do
@@ -2422,11 +2498,11 @@ local function goHorizontal(tx, tz)
 
     if x ~= safeX or z ~= safeZ then
       log("Ausserhalb Mining-Bereich. Fahre zuerst zurueck nach x="..safeX.." z="..safeZ)
-      travelDirect(safeX, safeZ)
+      travelOrStop(safeX, safeZ)
     end
   end
 
-  travelDirect(tx, tz)
+  travelOrStop(tx, tz)
 end
 
 local function goTo(tx, ty, tz)
