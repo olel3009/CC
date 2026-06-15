@@ -289,6 +289,10 @@ local function isEnderChestBlockName(name)
   return isEnderChestItemName(name)
 end
 
+local function isReservedEnderChestItemName(name)
+  return isEnderChestItemName(name) or isEnderStorageName(name)
+end
+
 local function refreshScanner()
   scanner = peripheral.find("geoScanner") or peripheral.find("geo_scanner")
   return scanner ~= nil
@@ -448,11 +452,11 @@ local function tryDigEnderChestHere(inspectFn, digFn, slot, label)
     return true
   end
 
-  return moveMatchingItemToSlot(isEnderChestItemName, slot, label)
+  return moveMatchingItemToSlot(isReservedEnderChestItemName, slot, label)
 end
 
 local function recoverAdjacentEnderChest(slot, label)
-  if moveMatchingItemToSlot(isEnderChestItemName, slot, label) then
+  if moveMatchingItemToSlot(isReservedEnderChestItemName, slot, label) then
     return true
   end
 
@@ -2006,12 +2010,18 @@ local function requireReservedChest(slot, label)
 
   local item = turtle.getItemDetail(slot)
 
-  if not item or not isEnderChestItemName(item.name) then
+  if not item or not isReservedEnderChestItemName(item.name) then
     recoverAdjacentEnderChest(slot, label)
     item = turtle.getItemDetail(slot)
   end
 
-  if not item or not isEnderChestItemName(item.name) then
+  if not item or not isReservedEnderChestItemName(item.name) then
+    if item then
+      log(label.." Slot "..slot.." enthaelt: "..tostring(item.name).." x"..tostring(item.count))
+    else
+      log(label.." Slot "..slot.." ist leer.")
+    end
+
     stop(label.." fehlt in Slot "..slot.." oder ist keine Ender-Chest.")
   end
 
