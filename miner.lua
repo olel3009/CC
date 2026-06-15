@@ -1288,6 +1288,24 @@ local function clampToMineArea(tx, tz)
   return tx, tz
 end
 
+local function nearestPointInMineArea(tx, tz)
+  if mineMinX then
+    return clampToMineArea(tx, tz)
+  end
+
+  local minX = mineCenterX - MAX_DISTANCE_FROM_SHAFT
+  local maxX = mineCenterX + MAX_DISTANCE_FROM_SHAFT
+  local minZ = mineCenterZ - MAX_DISTANCE_FROM_SHAFT
+  local maxZ = mineCenterZ + MAX_DISTANCE_FROM_SHAFT
+
+  if tx < minX then tx = minX end
+  if tx > maxX then tx = maxX end
+  if tz < minZ then tz = minZ end
+  if tz > maxZ then tz = maxZ end
+
+  return tx, tz
+end
+
 local function applyAdminCommand(sender, cmd)
   if type(cmd) == "string" then
     cmd = { command=cmd }
@@ -2361,41 +2379,54 @@ local function goHorizontal(tx, tz)
     end
   end
 
-  if x < tx then
-    face(1)
-    while x < tx do
-      local remaining = tx - x
-      if not forwardTravel(remaining) then stop("Weg nach Osten blockiert.") end
-      clean()
+  local function travelDirect(targetX, targetZ)
+    if x < targetX then
+      face(1)
+      while x < targetX do
+        local remaining = targetX - x
+        if not forwardTravel(remaining) then stop("Weg nach Osten blockiert.") end
+        clean()
+      end
+    end
+
+    if x > targetX then
+      face(3)
+      while x > targetX do
+        local remaining = x - targetX
+        if not forwardTravel(remaining) then stop("Weg nach Westen blockiert.") end
+        clean()
+      end
+    end
+
+    if z < targetZ then
+      face(2)
+      while z < targetZ do
+        local remaining = targetZ - z
+        if not forwardTravel(remaining) then stop("Weg nach Sueden blockiert.") end
+        clean()
+      end
+    end
+
+    if z > targetZ then
+      face(0)
+      while z > targetZ do
+        local remaining = z - targetZ
+        if not forwardTravel(remaining) then stop("Weg nach Norden blockiert.") end
+        clean()
+      end
     end
   end
 
-  if x > tx then
-    face(3)
-    while x > tx do
-      local remaining = x - tx
-      if not forwardTravel(remaining) then stop("Weg nach Westen blockiert.") end
-      clean()
+  if not inMineArea(x, z) then
+    local safeX, safeZ = nearestPointInMineArea(x, z)
+
+    if x ~= safeX or z ~= safeZ then
+      log("Ausserhalb Mining-Bereich. Fahre zuerst zurueck nach x="..safeX.." z="..safeZ)
+      travelDirect(safeX, safeZ)
     end
   end
 
-  if z < tz then
-    face(2)
-    while z < tz do
-      local remaining = tz - z
-      if not forwardTravel(remaining) then stop("Weg nach Sueden blockiert.") end
-      clean()
-    end
-  end
-
-  if z > tz then
-    face(0)
-    while z > tz do
-      local remaining = z - tz
-      if not forwardTravel(remaining) then stop("Weg nach Norden blockiert.") end
-      clean()
-    end
-  end
+  travelDirect(tx, tz)
 end
 
 local function goTo(tx, ty, tz)
