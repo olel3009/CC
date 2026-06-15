@@ -425,6 +425,7 @@ end
 restoreMiningUpgrades = function()
   recoverScannerUpgrade()
   recoverPickaxeUpgrade()
+  moveMatchingItemToSlot(isModemItemName, MODEM_SLOT, "Ender/Wireless Modem")
 end
 
 local function recoverModemSlot()
