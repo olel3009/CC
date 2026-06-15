@@ -2583,6 +2583,36 @@ local function randomMineTarget()
     math.random(mineCenterZ - MAX_DISTANCE_FROM_SHAFT, mineCenterZ + MAX_DISTANCE_FROM_SHAFT)
 end
 
+local function chooseNewExplorationCenter()
+  local tx, tz = randomMineTarget()
+  tx, tz = clampToMineArea(tx, tz)
+
+  if mineMinX then
+    mineCenterX = tx
+    mineCenterZ = tz
+    save()
+    log("Neues Suchzentrum im Mining-Bereich: x="..mineCenterX.." z="..mineCenterZ)
+  else
+    log("Neues Suchziel um Mining-Center: x="..tx.." z="..tz)
+  end
+
+  return tx, tz
+end
+
+local function randomSpin()
+  local turns = math.random(0, 7)
+
+  for _=1,turns do
+    if math.random(0, 1) == 0 then
+      turnRight()
+    else
+      turnRight()
+      turnRight()
+      turnRight()
+    end
+  end
+end
+
 local function travelRandomMoveAxis(target, isX)
   local delta
   local headingToFace
@@ -2662,17 +2692,18 @@ local function randomMove()
     return
   end
 
-  for _=1,8 do
-    local tx, tz = randomMineTarget()
-    tx, tz = clampToMineArea(tx, tz)
+  randomSpin()
 
+  for _=1,8 do
+    local tx, tz = chooseNewExplorationCenter()
     if tx ~= x or tz ~= z then
-      log("Keine Ores gefunden. Neues Random-Ziel: x="..tx.." y="..targetY.." z="..tz)
+      log("Keine Ores gefunden. Bewege zum neuen Suchzentrum: x="..tx.." y="..targetY.." z="..tz)
 
       local firstAxisIsX = math.random(0, 1) == 0
       local moved = travelRandomMoveTarget(tx, tz, firstAxisIsX)
 
       if moved > 0 then
+        randomSpin()
         log("Random Move fertig. Position: x="..x.." y="..y.." z="..z)
         return
       end
@@ -2683,44 +2714,72 @@ local function randomMove()
   goHorizontal(mineCenterX,mineCenterZ)
 end
 
+local function isRecoverableMiningError(err)
+  local text = tostring(err or "")
+
+  return string.find(text, "blockiert", 1, true) ~= nil
+    or string.find(text, "Abstieg zu Ziel-Y", 1, true) ~= nil
+    or string.find(text, "Ausweich", 1, true) ~= nil
+    or string.find(text, "Kann nicht nach oben fahren", 1, true) ~= nil
+    or string.find(text, "Kann nicht nach unten fahren", 1, true) ~= nil
+    or string.find(text, "Kann nicht streng nach vorne fahren", 1, true) ~= nil
+    or string.find(text, "Kann nicht zurueck fahren", 1, true) ~= nil
+end
+
+local function miningLoopStep()
+  sendMinuteStatusIfDue()
+  clean()
+  ensureCanReturn()
+
+  if pendingUnload then
+    pendingUnload = false
+    unload()
+  end
+
+  if pendingRefuel then
+    pendingRefuel = false
+    refuelFromEnderChestFull()
+  end
+
+  alignToTargetY()
+
+  if inventoryFull() then unload() end
+
+  local ore = nearestOre()
+
+  if not ore then
+    log("Keine Ores gefunden. Bewege mich zufaellig weiter.")
+    skippedTargets = {}
+    randomMove()
+    sleep(1)
+  else
+    veinSteps = 0
+    mineScannedOre(ore)
+    clean()
+    save()
+
+    log("Ores abgebaut seit Start: "..oreMinedCount)
+    printValuables()
+  end
+end
+
 local function miningLoop()
   minerState = "mining"
   log("Mining-Loop startet.")
 
   while true do
-    sendMinuteStatusIfDue()
-    clean()
-    ensureCanReturn()
+    local ok, err = pcall(miningLoopStep)
 
-    if pendingUnload then
-      pendingUnload = false
-      unload()
-    end
+    if not ok then
+      if not isRecoverableMiningError(err) then
+        error(err)
+      end
 
-    if pendingRefuel then
-      pendingRefuel = false
-      refuelFromEnderChestFull()
-    end
-
-    alignToTargetY()
-
-    if inventoryFull() then unload() end
-
-    local ore = nearestOre()
-
-    if not ore then
-      log("Keine Ores gefunden. Bewege mich zufaellig weiter.")
+      log("Recoverbarer Mining-Fehler: "..tostring(err))
+      log("Berechne neues Suchzentrum und versuche weiter.")
       skippedTargets = {}
-      randomMove()
+      chooseNewExplorationCenter()
       sleep(1)
-    else
-      veinSteps = 0
-      mineScannedOre(ore)
-      clean()
-      save()
-
-      log("Ores abgebaut seit Start: "..oreMinedCount)
-      printValuables()
     end
   end
 end
