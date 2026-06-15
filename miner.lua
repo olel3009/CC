@@ -147,6 +147,7 @@ local skippedTargets = {}
 local adminId = nil
 local modemSide = nil
 local modemEquipped = false
+local restoreMiningUpgrades
 local lastStatusAt = 0
 local adminStartReceived = false
 local pendingUnload = false
@@ -243,6 +244,10 @@ local function unequipEnderModem()
   end
 
   modemSide = nil
+
+  if restoreMiningUpgrades then
+    restoreMiningUpgrades()
+  end
 end
 
 local function openWirelessModem()
@@ -415,6 +420,11 @@ local function recoverPickaxeUpgrade()
   end
 
   return false
+end
+
+restoreMiningUpgrades = function()
+  recoverScannerUpgrade()
+  recoverPickaxeUpgrade()
 end
 
 local function recoverModemSlot()
