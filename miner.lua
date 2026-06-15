@@ -2053,7 +2053,11 @@ local function recoverReusableChest(slot, label, chestName)
   while turtle.detect() do
     local hasBlock, data = turtle.inspect()
 
-    if hasBlock and data and isProtectedBlock(data.name) then
+    if hasBlock and data and data.name ~= chestName then
+      stop(label.." vorne ist nicht die eigene Chest: "..data.name)
+    end
+
+    if hasBlock and data and isProtectedBlock(data.name) and data.name ~= chestName then
       stop("Geschuetzter Block vorne wird nicht abgebaut: "..data.name)
     end
 
