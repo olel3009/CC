@@ -67,11 +67,26 @@ local TARGET_ORES = {
   ["ae2:charged_quartz_ore"]=true,
   ["ae2:deepslate_charged_quartz_ore"]=true,
   ["ae2:sky_stone_block"]=true,
-  ["ae2:sky_stone_chest"]=true
+  ["ae2:sky_stone_chest"]=true,
+
+  -- Draconic Evolution / Draconium
+  ["draconicevolution:draconium_ore"]=true,
+  ["draconicevolution:deepslate_draconium_ore"]=true,
+  ["draconicevolution:end_draconium_ore"]=true,
+  ["draconicevolution:nether_draconium_ore"]=true,
+  ["extendedcrafting:draconium_ore"]=true
 }
 
 local NETHERITE_TARGETS = {
   ["minecraft:ancient_debris"]=true
+}
+
+local DRACONIUM_ORES = {
+  ["draconicevolution:draconium_ore"]=true,
+  ["draconicevolution:deepslate_draconium_ore"]=true,
+  ["draconicevolution:end_draconium_ore"]=true,
+  ["draconicevolution:nether_draconium_ore"]=true,
+  ["extendedcrafting:draconium_ore"]=true
 }
 
 local NETHER_BLOCKS = {
@@ -1092,11 +1107,7 @@ local function sendStatus(kind, resetMinute)
 
   local payload = statusPayload(kind)
 
-  if adminId then
-    rednet.send(adminId, payload, ADMIN_PROTOCOL)
-  else
-    rednet.broadcast(payload, ADMIN_PROTOCOL)
-  end
+  rednet.broadcast(payload, ADMIN_PROTOCOL)
 
   unequipEnderModem()
 
@@ -1134,6 +1145,7 @@ local function normalizeOreName(name)
   if text == "" then return nil end
   if text == "all" or text == "*" then return "all" end
   if text == "netherite" or text == "ancient_debris" then return "minecraft:ancient_debris" end
+  if text == "draconium" or text == "draconium_ore" then return "draconicevolution:draconium_ore" end
   if string.find(text, ":", 1, true) then return text end
   if string.find(text, "_ore", 1, true) then return "minecraft:"..text end
 
@@ -1144,7 +1156,14 @@ local function oreSetFromCommand(value)
   if value == nil then return nil, false end
 
   local result = {}
+
   local function addOreName(name)
+    if name == "draconicevolution:draconium_ore" then
+      for alias in pairs(DRACONIUM_ORES) do
+        result[alias] = true
+      end
+    end
+
     result[name] = true
 
     local vanilla = string.match(name, "^minecraft:(.+_ore)$")
@@ -1153,21 +1172,31 @@ local function oreSetFromCommand(value)
     end
   end
 
+  local function addCommandPart(part)
+    local raw = string.lower(tostring(part))
+    raw = string.gsub(raw, "^%s+", "")
+    raw = string.gsub(raw, "%s+$", "")
+
+    if raw == "draconium" or raw == "draconium_ore" then
+      for alias in pairs(DRACONIUM_ORES) do
+        result[alias] = true
+      end
+      return false
+    end
+
+    local name = normalizeOreName(part)
+    if name == "all" then return true end
+    if name then addOreName(name) end
+    return false
+  end
+
   if type(value) == "string" then
     for part in string.gmatch(value, "[^,]+") do
-      local name = normalizeOreName(part)
-      if name == "all" then return nil, true end
-      if name then
-        addOreName(name)
-      end
+      if addCommandPart(part) then return nil, true end
     end
   elseif type(value) == "table" then
     for _,part in pairs(value) do
-      local name = normalizeOreName(part)
-      if name == "all" then return nil, true end
-      if name then
-        addOreName(name)
-      end
+      if addCommandPart(part) then return nil, true end
     end
   end
 
