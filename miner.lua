@@ -2453,46 +2453,6 @@ local function goHorizontal(tx, tz)
     if not ok then stop(err or "Horizontaler Weg blockiert.") end
   end
 
-  -- Legacy direct travel kept unreachable for reference? 
-  -- no-op
-  if false then
-    if x < targetX then
-      face(1)
-      while x < targetX do
-        local remaining = targetX - x
-        if not forwardTravel(remaining) then stop("Weg nach Osten blockiert.") end
-        clean()
-      end
-    end
-
-    if x > targetX then
-      face(3)
-      while x > targetX do
-        local remaining = x - targetX
-        if not forwardTravel(remaining) then stop("Weg nach Westen blockiert.") end
-        clean()
-      end
-    end
-
-    if z < targetZ then
-      face(2)
-      while z < targetZ do
-        local remaining = targetZ - z
-        if not forwardTravel(remaining) then stop("Weg nach Sueden blockiert.") end
-        clean()
-      end
-    end
-
-    if z > targetZ then
-      face(0)
-      while z > targetZ do
-        local remaining = z - targetZ
-        if not forwardTravel(remaining) then stop("Weg nach Norden blockiert.") end
-        clean()
-      end
-    end
-  end
-
   if not inMineArea(x, z) then
     local safeX, safeZ = nearestPointInMineArea(x, z)
 
