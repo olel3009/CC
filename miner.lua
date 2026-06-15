@@ -267,7 +267,19 @@ local function isPickaxeItemName(name)
   return string.find(lowerName(name), "pickaxe", 1, true) ~= nil
 end
 
+local function isEnderStorageName(name)
+  local lower = lowerName(name)
+  return string.match(lower, "^enderstorage:") ~= nil
+    or string.match(lower, "^ender_storage:") ~= nil
+    or string.find(lower, "enderstorage", 1, true) ~= nil
+    or string.find(lower, "ender_storage", 1, true) ~= nil
+end
+
 local function isEnderChestItemName(name)
+  if isEnderStorageName(name) then
+    return false
+  end
+
   local lower = lowerName(name)
   return string.find(lower, "ender", 1, true) ~= nil
     and string.find(lower, "chest", 1, true) ~= nil
@@ -1012,6 +1024,10 @@ end
 
 local function isProtectedBlock(name)
   if not name then return false end
+
+  if isEnderStorageName(name) then
+    return true
+  end
 
   if string.find(name, "turtle", 1, true) then
     return true
@@ -1843,6 +1859,44 @@ local function forwardTravel(remaining)
   return tryBypassUp()
 end
 
+local function descendToTargetWithSidestep()
+  local sidesteps = 0
+
+  while y > targetY do
+    if rawDown() then
+      clean()
+    else
+      local startHeading = heading
+      local moved = false
+
+      log("Abstieg zu Ziel-Y blockiert. Suche seitlich eine freie Abstiegsspalte.")
+
+      for _,offset in ipairs({1, 3, 0, 2}) do
+        face((startHeading + offset) % 4)
+
+        if rawForward(true, true) then
+          moved = true
+          sidesteps = sidesteps + 1
+          clean()
+          break
+        end
+      end
+
+      if not moved then
+        face(startHeading)
+        return false
+      end
+
+      if sidesteps >= 16 then
+        log("Zu viele Seitenschritte beim Abstieg zu Ziel-Y.")
+        return false
+      end
+    end
+  end
+
+  return true
+end
+
 local function moveBackStrict()
   local old = heading
   face((old + 2) % 4)
@@ -1987,6 +2041,12 @@ local function recoverReusableChest(slot, label, chestName)
   turtle.select(slot)
 
   while turtle.detect() do
+    local hasBlock, data = turtle.inspect()
+
+    if hasBlock and data and isProtectedBlock(data.name) then
+      stop("Geschuetzter Block vorne wird nicht abgebaut: "..data.name)
+    end
+
     if turtle.dig() then
       break
     end
@@ -2200,9 +2260,8 @@ local function goHorizontal(tx, tz)
   if y > targetY then
     log("Seitliche Bewegung ueber Ziel-Y verhindert. Fahre zuerst runter zu Ziel-Y.")
 
-    while y > targetY do
-      down()
-      clean()
+    if not descendToTargetWithSidestep() then
+      stop("Seitliche Bewegung ueber Ziel-Y blockiert.")
     end
   end
 
@@ -2246,9 +2305,8 @@ end
 local function goTo(tx, ty, tz)
   log("Gehe zu x="..tx.." y="..ty.." z="..tz.." von x="..x.." y="..y.." z="..z)
 
-  while y > targetY do
-    down()
-    clean()
+  if not descendToTargetWithSidestep() then
+    stop("Abstieg zu Ziel-Y vor Reise blockiert.")
   end
 
   goHorizontal(tx, tz)
@@ -2470,12 +2528,11 @@ local function descendToTarget()
   if x == homeX and z == homeZ and y > targetY then
     log("Fahre runter von Y "..y.." zu Ziel-Y "..targetY)
 
-    while y > targetY do
-      down()
-      clean()
-      log("Aktuelle Y: "..y.." / Ziel-Y: "..targetY)
+    if not descendToTargetWithSidestep() then
+      stop("Abstieg zu Ziel-Y blockiert.")
     end
 
+    log("Aktuelle Y: "..y.." / Ziel-Y: "..targetY)
     log("Zielhoehe erreicht.")
   elseif y == targetY then
     log("Bin bereits auf Ziel-Y.")
@@ -2493,9 +2550,8 @@ local function descendToTarget()
 end
 
 local function alignToTargetY()
-  while y > targetY do
-    down()
-    clean()
+  if not descendToTargetWithSidestep() then
+    stop("Abstieg zu Ziel-Y blockiert.")
   end
 
   while y < targetY do
@@ -2511,9 +2567,8 @@ end
 local function randomMove()
   ensureCanReturn()
 
-  while y > targetY do
-    down()
-    clean()
+  if not descendToTargetWithSidestep() then
+    stop("Abstieg zu Ziel-Y vor Random Move blockiert.")
   end
 
   if tooFarFromShaft() then
