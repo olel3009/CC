@@ -276,16 +276,16 @@ local function isEnderStorageName(name)
 end
 
 local function isEnderChestItemName(name)
-  if isEnderStorageName(name) then
-    return false
-  end
-
   local lower = lowerName(name)
   return string.find(lower, "ender", 1, true) ~= nil
     and string.find(lower, "chest", 1, true) ~= nil
 end
 
 local function isEnderChestBlockName(name)
+  if isEnderStorageName(name) then
+    return false
+  end
+
   return isEnderChestItemName(name)
 end
 
