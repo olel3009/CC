@@ -389,6 +389,7 @@ local function ageColor(age)
 end
 
 local function stateColor(status)
+  if status.state == "crashed" or status.state == "startup_error" or status.state == "stopped" then return colors.red end
   if status.alert then return colors.red end
   if status.state == "waiting" then return colors.yellow end
   if status.state == "unloading" then return colors.orange end
@@ -741,10 +742,13 @@ local function drawMonitor()
     writeAt(monitor, 3, detailY + 2, "Total "..shortNumber(s.minedTotal).."  Last "..shortNumber(s.minedLastMinuteTotal or 0).."/min", colors.yellow, colors.black)
     writeAt(monitor, 3, detailY + 3, safeText("Mode "..tostring(s.miningMode).." / "..oreMode.."  Y "..tostring(s.targetY), mainW - 4), colors.lightGray, colors.black)
     writeAt(monitor, 3, detailY + 4, safeText("Pos "..tostring(s.x)..","..tostring(s.y)..","..tostring(s.z).."  Cmd "..tostring(s.lastCommand or "-").."#"..tostring(s.lastCommandSeq or "-"), mainW - 4), colors.lightBlue, colors.black)
-    writeAt(monitor, 3, detailY + 5, "ORE", colors.yellow, colors.black)
-    drawSparkline(monitor, 8, detailY + 5, math.max(1, mainW - 8), minedValues, math.max(1, minedMax), colors.yellow, colors.black)
-    writeAt(monitor, 3, detailY + 6, "FUEL", colors.cyan, colors.black)
-    drawSparkline(monitor, 8, detailY + 6, math.max(1, mainW - 8), fuelValues, 1, colors.cyan, colors.black)
+    if s.crashError then
+      writeAt(monitor, 3, detailY + 5, safeText("Error "..tostring(s.crashError), mainW - 4), colors.red, colors.black)
+    end
+    writeAt(monitor, 3, detailY + 6, "ORE", colors.yellow, colors.black)
+    drawSparkline(monitor, 8, detailY + 6, math.max(1, mainW - 8), minedValues, math.max(1, minedMax), colors.yellow, colors.black)
+    writeAt(monitor, 3, detailY + 7, "FUEL", colors.cyan, colors.black)
+    drawSparkline(monitor, 8, detailY + 7, math.max(1, mainW - 8), fuelValues, 1, colors.cyan, colors.black)
   end
 end
 

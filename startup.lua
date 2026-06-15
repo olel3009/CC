@@ -4,9 +4,53 @@ local UPDATE_FILE = "miner.lua.new"
 local BACKUP_FILE = "miner.lua.old"
 local STATE_FILE = "miner_state"
 local MIN_MINER_SIZE = 20000
+local ADMIN_PROTOCOL = "miner_admin"
 
 local function log(msg)
   print("[Startup] "..msg)
+end
+
+local function computerId()
+  if os.getComputerID then return os.getComputerID() end
+  return nil
+end
+
+local function openWirelessModem()
+  for _,name in ipairs(peripheral.getNames()) do
+    if peripheral.getType(name) == "modem" then
+      local modem = peripheral.wrap(name)
+
+      if modem and modem.isWireless and modem.isWireless() then
+        if not rednet.isOpen(name) then
+          rednet.open(name)
+        end
+
+        return true
+      end
+    end
+  end
+
+  return false
+end
+
+local function sendStartupStatus(state, alert, err)
+  if not openWirelessModem() then
+    log("Kein Wireless/Ender Modem fuer Crash-Status gefunden.")
+    return false
+  end
+
+  rednet.broadcast({
+    type="miner_status",
+    kind=state,
+    state=state,
+    alert=alert,
+    crashError=tostring(err or ""),
+    id=computerId(),
+    label=os.getComputerLabel and os.getComputerLabel() or nil,
+    wantsCommand=true
+  }, ADMIN_PROTOCOL)
+
+  return true
 end
 
 local function minerDownloadUrl()
@@ -97,13 +141,16 @@ while true do
 
     if not ok then
       log("Miner crash: "..tostring(err))
+      sendStartupStatus("crashed", "crashed", err)
       deleteMinerState()
     else
       log("Miner beendet oder abgestuerzt ohne Lua-Fehler.")
+      sendStartupStatus("stopped", "stopped", "Miner beendet ohne pcall-Fehler.")
       deleteMinerState()
     end
   else
     log("Kein Miner vorhanden. Warte.")
+    sendStartupStatus("startup_error", "startup_error", "Kein gueltiger Miner vorhanden.")
   end
 
   sleep(5)
