@@ -147,7 +147,6 @@ local skippedTargets = {}
 local adminId = nil
 local modemSide = nil
 local modemEquipped = false
-local restoreMiningUpgrades
 local lastStatusAt = 0
 local adminStartReceived = false
 local pendingUnload = false
@@ -181,12 +180,12 @@ end
 local save
 local stop
 
-local function computerId()
+function computerId()
   if os.getComputerID then return os.getComputerID() end
   return nil
 end
 
-local function findWirelessModemSide()
+function findWirelessModemSide()
   for _,name in ipairs(peripheral.getNames()) do
     if peripheral.getType(name) == "modem" then
       local modem = peripheral.wrap(name)
@@ -200,7 +199,7 @@ local function findWirelessModemSide()
   return nil
 end
 
-local function equipEnderModem()
+function equipEnderModem()
   if modemEquipped then return true end
 
   modemSide = findWirelessModemSide()
@@ -228,21 +227,49 @@ local function equipEnderModem()
   return false
 end
 
-local function unequipEnderModem()
+function forceUnequipWirelessModem()
+  local side = findWirelessModemSide()
+  if not side then return false end
+
+  if rednet.isOpen and rednet.isOpen(side) then
+    rednet.close(side)
+  end
+
+  turtle.select(MODEM_SLOT)
+
+  if side == "right" and turtle.equipRight and turtle.equipRight() then
+    modemEquipped = false
+    modemSide = nil
+    return true
+  end
+
+  if side == "left" and turtle.equipLeft and turtle.equipLeft() then
+    modemEquipped = false
+    modemSide = nil
+    return true
+  end
+
+  if turtle.equipRight and turtle.equipRight() and not findWirelessModemSide() then
+    modemEquipped = false
+    modemSide = nil
+    return true
+  end
+
+  if turtle.equipLeft and turtle.equipLeft() and not findWirelessModemSide() then
+    modemEquipped = false
+    modemSide = nil
+    return true
+  end
+
+  return false
+end
+
+function unequipEnderModem()
   if modemSide and rednet.isOpen and rednet.isOpen(modemSide) then
     rednet.close(modemSide)
   end
 
-  if modemEquipped then
-    turtle.select(MODEM_SLOT)
-
-    if turtle.equipRight and turtle.equipRight() then
-      modemEquipped = false
-    elseif turtle.equipLeft and turtle.equipLeft() then
-      modemEquipped = false
-    end
-  end
-
+  forceUnequipWirelessModem()
   modemSide = nil
 
   if restoreMiningUpgrades then
@@ -250,7 +277,7 @@ local function unequipEnderModem()
   end
 end
 
-local function openWirelessModem()
+function openWirelessModem()
   if modemSide and rednet.isOpen and rednet.isOpen(modemSide) then
     return true
   end
@@ -269,21 +296,21 @@ local function openWirelessModem()
   return false
 end
 
-local function lowerName(name)
+function lowerName(name)
   return string.lower(tostring(name or ""))
 end
 
-local function isScannerItemName(name)
+function isScannerItemName(name)
   local lower = lowerName(name)
   return string.find(lower, "geo", 1, true) ~= nil
     and string.find(lower, "scanner", 1, true) ~= nil
 end
 
-local function isModemItemName(name)
+function isModemItemName(name)
   return string.find(lowerName(name), "modem", 1, true) ~= nil
 end
 
-local function isPickaxeItemName(name)
+function isPickaxeItemName(name)
   return string.find(lowerName(name), "pickaxe", 1, true) ~= nil
 end
 
@@ -428,11 +455,15 @@ restoreMiningUpgrades = function()
   moveMatchingItemToSlot(isModemItemName, MODEM_SLOT, "Ender/Wireless Modem")
 end
 
-local function ensureMiningUpgrades(context)
+function ensureMiningUpgrades(context)
+  if findWirelessModemSide() and not forceUnequipWirelessModem() then
+    stop("Wireless/Ender-Modem ist vor dem Graben noch ausgeruestet und konnte nicht abgelegt werden ("..tostring(context)..").")
+  end
+
   restoreMiningUpgrades()
 
   if findWirelessModemSide() then
-    log("Warnung: Wireless/Ender-Modem ist vor dem Graben noch ausgeruestet ("..tostring(context)..").")
+    stop("Wireless/Ender-Modem ist vor dem Graben noch ausgeruestet ("..tostring(context)..").")
   end
 end
 
@@ -1307,7 +1338,7 @@ local function clampToMineArea(tx, tz)
   return tx, tz
 end
 
-local function nearestPointInMineArea(tx, tz)
+function nearestPointInMineArea(tx, tz)
   if mineMinX then
     return clampToMineArea(tx, tz)
   end
@@ -1531,7 +1562,7 @@ local function updateForwardPosition()
   end
 end
 
-local function forwardPosition()
+function forwardPosition()
   local nx, nz = x, z
 
   if heading == 0 then
@@ -1547,7 +1578,7 @@ local function forwardPosition()
   return nx, nz
 end
 
-local function distanceFromMineArea(tx, tz)
+function distanceFromMineArea(tx, tz)
   if mineMinX then
     local dx = 0
     local dz = 0
@@ -1572,7 +1603,7 @@ local function distanceFromMineArea(tx, tz)
   return dx + dz
 end
 
-local function forwardStaysInMineArea()
+function forwardStaysInMineArea()
   local nx, nz = forwardPosition()
 
   if inMineArea(x, z) then
