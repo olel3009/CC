@@ -428,6 +428,14 @@ restoreMiningUpgrades = function()
   moveMatchingItemToSlot(isModemItemName, MODEM_SLOT, "Ender/Wireless Modem")
 end
 
+local function ensureMiningUpgrades(context)
+  restoreMiningUpgrades()
+
+  if findWirelessModemSide() then
+    log("Warnung: Wireless/Ender-Modem ist vor dem Graben noch ausgeruestet ("..tostring(context)..").")
+  end
+end
+
 local function recoverModemSlot()
   if moveMatchingItemToSlot(isModemItemName, MODEM_SLOT, "Ender/Wireless Modem") then
     return true
@@ -1621,6 +1629,8 @@ local function printValuables()
 end
 
 local function digFrontCanFail()
+  ensureMiningUpgrades("front")
+
   local tries = 0
 
   while turtle.detect() do
@@ -1663,6 +1673,8 @@ local function digFrontCanFail()
 end
 
 local function digUpCanFail()
+  ensureMiningUpgrades("up")
+
   local tries = 0
 
   while turtle.detectUp() do
@@ -1705,6 +1717,8 @@ local function digUpCanFail()
 end
 
 local function digDownCanFail()
+  ensureMiningUpgrades("down")
+
   local tries = 0
 
   while turtle.detectDown() do
