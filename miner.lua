@@ -1494,6 +1494,57 @@ local function updateForwardPosition()
   end
 end
 
+local function forwardPosition()
+  local nx, nz = x, z
+
+  if heading == 0 then
+    nz = nz - 1
+  elseif heading == 1 then
+    nx = nx + 1
+  elseif heading == 2 then
+    nz = nz + 1
+  elseif heading == 3 then
+    nx = nx - 1
+  end
+
+  return nx, nz
+end
+
+local function distanceFromMineArea(tx, tz)
+  if mineMinX then
+    local dx = 0
+    local dz = 0
+
+    if tx < mineMinX then
+      dx = mineMinX - tx
+    elseif tx > mineMaxX then
+      dx = tx - mineMaxX
+    end
+
+    if tz < mineMinZ then
+      dz = mineMinZ - tz
+    elseif tz > mineMaxZ then
+      dz = tz - mineMaxZ
+    end
+
+    return dx + dz
+  end
+
+  local dx = math.max(0, math.abs(tx - mineCenterX) - MAX_DISTANCE_FROM_SHAFT)
+  local dz = math.max(0, math.abs(tz - mineCenterZ) - MAX_DISTANCE_FROM_SHAFT)
+  return dx + dz
+end
+
+local function forwardStaysInMineArea()
+  local nx, nz = forwardPosition()
+
+  if inMineArea(x, z) then
+    return inMineArea(nx, nz)
+  end
+
+  return distanceFromMineArea(nx, nz) < distanceFromMineArea(x, z)
+end
+
 local function clean()
   local old = turtle.getSelectedSlot()
 
@@ -1670,6 +1721,12 @@ local function rawForward(allowAboveTarget, entityAvoid)
   checkFuel()
 
   if y > targetY and not allowAboveTarget then
+    return false
+  end
+
+  if not forwardStaysInMineArea() then
+    local nx, nz = forwardPosition()
+    log("Bewegung aus Mining-Bereich verhindert: x="..nx.." z="..nz)
     return false
   end
 
@@ -2460,28 +2517,40 @@ local function mineScannedOre(ore)
   local success = false
 
   if ty > targetY then
-    goTo(tx, ty - 1, tz)
-    success = mineUpOreAndEnter()
+    if inMineArea(tx, tz) then
+      goTo(tx, ty - 1, tz)
+      success = mineUpOreAndEnter()
+    end
   elseif ty < targetY then
-    goTo(tx, ty + 1, tz)
-    success = mineDownOreAndEnter()
+    if inMineArea(tx, tz) then
+      goTo(tx, ty + 1, tz)
+      success = mineDownOreAndEnter()
+    end
   else
     if ore.x > 0 then
-      goTo(tx - 1, ty, tz)
-      face(1)
-      success = mineFrontOreAndEnter()
+      if inMineArea(tx - 1, tz) then
+        goTo(tx - 1, ty, tz)
+        face(1)
+        success = mineFrontOreAndEnter()
+      end
     elseif ore.x < 0 then
-      goTo(tx + 1, ty, tz)
-      face(3)
-      success = mineFrontOreAndEnter()
+      if inMineArea(tx + 1, tz) then
+        goTo(tx + 1, ty, tz)
+        face(3)
+        success = mineFrontOreAndEnter()
+      end
     elseif ore.z > 0 then
-      goTo(tx, ty, tz - 1)
-      face(2)
-      success = mineFrontOreAndEnter()
+      if inMineArea(tx, tz - 1) then
+        goTo(tx, ty, tz - 1)
+        face(2)
+        success = mineFrontOreAndEnter()
+      end
     elseif ore.z < 0 then
-      goTo(tx, ty, tz + 1)
-      face(0)
-      success = mineFrontOreAndEnter()
+      if inMineArea(tx, tz + 1) then
+        goTo(tx, ty, tz + 1)
+        face(0)
+        success = mineFrontOreAndEnter()
+      end
     else
       log("Ore-Koordinate ist eigene Position. Ueberspringe.")
       success = false
