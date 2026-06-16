@@ -1770,6 +1770,7 @@ function applyAdminCommand(sender, cmd)
         end
       end
 
+      waitForRecoveryCoords(missingLabel, missingSlot)
       return true
     end
   end
@@ -1837,6 +1838,34 @@ function pollAdminCommands(timeout)
 
   unequipEnderModem()
   return applied
+end
+
+function waitForRecoveryCoords(reason, missingSlot)
+  minerState = "recovery_wait_coords"
+  minerAlert = "missing_recovery_coords"
+  debugLog("REC wait coords reason="..tostring(reason).." slot="..tostring(missingSlot))
+
+  while not (recoveryX and recoveryY and recoveryZ) do
+    save()
+    sendStatus("missing_recovery_coords", false)
+    debugLog("REC need coords rx="..tostring(recoveryX).." ry="..tostring(recoveryY).." rz="..tostring(recoveryZ))
+    pollAdminCommands(COMMAND_WAIT)
+    sleep(2)
+  end
+
+  debugLog("REC coords arrived rx="..tostring(recoveryX).." ry="..tostring(recoveryY).." rz="..tostring(recoveryZ))
+
+  if goToRecoveryIfConfigured then
+    local recoveryOk, recoveryErr = pcall(goToRecoveryIfConfigured, reason, missingSlot)
+
+    if not recoveryOk then
+      debugLog("REC wait go fail: "..tostring(recoveryErr))
+    elseif recoveryErr == false then
+      debugLog("REC wait go false")
+    end
+  end
+
+  return false
 end
 
 function sendMinuteStatusIfDue()
@@ -2562,6 +2591,7 @@ function requireReservedChest(slot, label)
         end
       end
 
+      waitForRecoveryCoords(missingLabel, missingSlot)
       stop(missingLabel.." fehlt in Slot "..missingSlot.." oder ist keine Ender-Chest.")
     end
   end
@@ -2589,6 +2619,7 @@ function requireReservedChest(slot, label)
       end
     end
 
+    waitForRecoveryCoords(label, slot)
     stop(label.." fehlt in Slot "..slot.." oder ist keine Ender-Chest.")
   end
 
