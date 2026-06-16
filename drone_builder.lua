@@ -192,11 +192,51 @@ local function missingRequirements()
   return missing
 end
 
+local function countBlockerItems()
+  local _, detail = findBlockerSlotFixed()
+
+  if not detail then return 0 end
+
+  local total = 0
+
+  for slot=1,16 do
+    local other = item(slot)
+
+    if other and not isSpecialItem(other) and other.name == detail.name then
+      total = total + turtle.getItemCount(slot)
+    end
+  end
+
+  return total
+end
+
+local function printInventorySummary()
+  print("Erkannt:")
+  print("- Turtles: "..(findSlot(isTurtleItem) and "1+" or "0"))
+  print("- Scanner: "..(findSlot(isScannerItem) and "1+" or "0"))
+  print("- Pickaxe: "..(findSlot(isPickaxeItem) and "1+" or "0"))
+  print("- Modem: "..(findSlot(isModemItem) and "1+" or "0"))
+  print("- Ender-Chests: "..countEnderChests())
+  print("- Dummy-Items: "..countBlockerItems().." / "..BLOCKER_COUNT)
+end
+
 local function ensureRequirements(droneIndex)
   local missing = missingRequirements()
 
   if #missing > 0 then
-    error("Material fuer Drone #"..droneIndex.." fehlt im Builder-Inventar: "..table.concat(missing, ", "))
+    print("")
+    print("========== MATERIAL FEHLT ==========")
+    print("Drone #"..droneIndex.." kann nicht gebaut werden.")
+    print("Fehlt im Builder-Inventar:")
+
+    for _,label in ipairs(missing) do
+      print("- "..label)
+    end
+
+    print("")
+    printInventorySummary()
+    print("====================================")
+    error("Material fehlt.")
   end
 end
 
