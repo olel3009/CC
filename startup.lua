@@ -1,8 +1,12 @@
+local STARTUP_URL = "https://raw.githubusercontent.com/olel3009/CC/main/startup.lua"
+local STARTUP_FILE = "startup.lua"
+local STARTUP_UPDATE_FILE = "startup.lua.new"
+local STARTUP_BACKUP_FILE = "startup.lua.old"
 local MINER_URL = "https://raw.githubusercontent.com/olel3009/CC/main/miner.lua"
 local MINER_FILE = "miner.lua"
 local UPDATE_FILE = "miner.lua.new"
 local BACKUP_FILE = "miner.lua.old"
-local STATE_FILE = "miner_state"
+local MIN_STARTUP_SIZE = 1000
 local MIN_MINER_SIZE = 20000
 local ADMIN_PROTOCOL = "miner_admin"
 
@@ -61,13 +65,30 @@ local function minerDownloadUrl()
   return MINER_URL
 end
 
-local function validateMiner(path)
+local function startupDownloadUrl()
+  if os.epoch then
+    return STARTUP_URL.."?t="..tostring(os.epoch("utc"))
+  end
+
+  return STARTUP_URL
+end
+
+local function readFile(path)
+  if not fs.exists(path) then return nil end
+
+  local f = fs.open(path, "r")
+  local text = f.readAll()
+  f.close()
+  return text
+end
+
+local function validateLuaFile(path, minSize)
   if not fs.exists(path) then
     return false, "Datei fehlt"
   end
 
   local size = fs.getSize(path)
-  if size < MIN_MINER_SIZE then
+  if size < minSize then
     return false, "Datei zu klein: "..tostring(size).." Bytes"
   end
 
@@ -76,6 +97,57 @@ local function validateMiner(path)
     return false, "Lua-Syntaxfehler: "..tostring(err)
   end
 
+  return true
+end
+
+local function validateMiner(path)
+  return validateLuaFile(path, MIN_MINER_SIZE)
+end
+
+local function validateStartup(path)
+  return validateLuaFile(path, MIN_STARTUP_SIZE)
+end
+
+local function updateStartup()
+  local url = startupDownloadUrl()
+
+  log("Pruefe Startup-Update.")
+  log(url)
+
+  if fs.exists(STARTUP_UPDATE_FILE) then
+    fs.delete(STARTUP_UPDATE_FILE)
+  end
+
+  local ok = shell.run("wget", url, STARTUP_UPDATE_FILE)
+
+  if not ok or not fs.exists(STARTUP_UPDATE_FILE) then
+    log("Startup-Update fehlgeschlagen. Nutze vorhandene Startup.")
+    return false
+  end
+
+  local valid, err = validateStartup(STARTUP_UPDATE_FILE)
+  if not valid then
+    log("Startup-Update verworfen: "..tostring(err))
+    fs.delete(STARTUP_UPDATE_FILE)
+    return false
+  end
+
+  if readFile(STARTUP_UPDATE_FILE) == readFile(STARTUP_FILE) then
+    fs.delete(STARTUP_UPDATE_FILE)
+    log("Startup ist aktuell.")
+    return false
+  end
+
+  if fs.exists(STARTUP_BACKUP_FILE) then
+    fs.delete(STARTUP_BACKUP_FILE)
+  end
+
+  if fs.exists(STARTUP_FILE) then
+    fs.move(STARTUP_FILE, STARTUP_BACKUP_FILE)
+  end
+
+  fs.move(STARTUP_UPDATE_FILE, STARTUP_FILE)
+  log("Startup aktualisiert. Reboot fuer neue Startup.")
   return true
 end
 
@@ -118,13 +190,6 @@ local function updateMiner()
   return validateMiner(MINER_FILE)
 end
 
-local function deleteMinerState()
-  if fs.exists(STATE_FILE) then
-    fs.delete(STATE_FILE)
-    log("Miner-State geloescht: "..STATE_FILE)
-  end
-end
-
 local function runMiner()
   local program, err = loadfile(MINER_FILE)
 
@@ -136,6 +201,11 @@ local function runMiner()
 end
 
 while true do
+  if updateStartup() then
+    sleep(2)
+    os.reboot()
+  end
+
   if updateMiner() then
     local ok, err = runMiner()
 

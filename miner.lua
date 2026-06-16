@@ -169,17 +169,17 @@ local scanner = peripheral.find("geoScanner") or peripheral.find("geo_scanner")
 
 math.randomseed(os.epoch("utc"))
 
-local function log(msg)
+function log(msg)
   print("[Miner] "..msg)
 end
 
-local function writeTable(path, data)
+function writeTable(path, data)
   local f = fs.open(path, "w")
   f.write(textutils.serialize(data))
   f.close()
 end
 
-local function readTable(path)
+function readTable(path)
   local f = fs.open(path, "r")
   local data = textutils.unserialize(f.readAll())
   f.close()
@@ -331,13 +331,13 @@ function isEnderStorageName(name)
     or string.find(lower, "ender_storage", 1, true) ~= nil
 end
 
-local function isEnderChestItemName(name)
+function isEnderChestItemName(name)
   local lower = lowerName(name)
   return string.find(lower, "ender", 1, true) ~= nil
     and string.find(lower, "chest", 1, true) ~= nil
 end
 
-local function isEnderChestBlockName(name)
+function isEnderChestBlockName(name)
   return isEnderChestItemName(name) or isEnderStorageName(name)
 end
 
@@ -345,12 +345,12 @@ function isReservedEnderChestItemName(name)
   return isEnderChestItemName(name) or isEnderStorageName(name)
 end
 
-local function refreshScanner()
+function refreshScanner()
   scanner = peripheral.find("geoScanner") or peripheral.find("geo_scanner")
   return scanner ~= nil
 end
 
-local function findSlotByNameTest(testFn, firstSlot, lastSlot)
+function findSlotByNameTest(testFn, firstSlot, lastSlot)
   for i=firstSlot or 1,lastSlot or 16 do
     local item = turtle.getItemDetail(i)
     if item and testFn(item.name) then
@@ -361,7 +361,7 @@ local function findSlotByNameTest(testFn, firstSlot, lastSlot)
   return nil, nil
 end
 
-local function findEmptySlot(firstSlot, lastSlot)
+function findEmptySlot(firstSlot, lastSlot)
   for i=firstSlot or 1,lastSlot or 16 do
     if turtle.getItemCount(i) == 0 then
       return i
@@ -371,7 +371,7 @@ local function findEmptySlot(firstSlot, lastSlot)
   return nil
 end
 
-local function moveMatchingItemToSlot(testFn, targetSlot, label)
+function moveMatchingItemToSlot(testFn, targetSlot, label)
   local targetItem = turtle.getItemDetail(targetSlot)
 
   if targetItem and testFn(targetItem.name) then
@@ -405,7 +405,7 @@ local function moveMatchingItemToSlot(testFn, targetSlot, label)
   return true
 end
 
-local function equipItemFromSlot(slot, label)
+function equipItemFromSlot(slot, label)
   if not slot then return false end
 
   turtle.select(slot)
@@ -423,7 +423,7 @@ local function equipItemFromSlot(slot, label)
   return false
 end
 
-local function recoverScannerUpgrade()
+function recoverScannerUpgrade()
   if refreshScanner() then return true end
 
   local slot = findSlotByNameTest(isScannerItemName, 1, 16)
@@ -434,7 +434,7 @@ local function recoverScannerUpgrade()
   return false
 end
 
-local function recoverPickaxeUpgrade()
+function recoverPickaxeUpgrade()
   local slot = findSlotByNameTest(isPickaxeItemName, 1, 16)
   if not slot then return false end
 
@@ -486,7 +486,7 @@ function ensureMiningUpgrades(context)
   end
 end
 
-local function recoverModemSlot()
+function recoverModemSlot()
   if moveMatchingItemToSlot(isModemItemName, MODEM_SLOT, "Ender/Wireless Modem") then
     return true
   end
@@ -498,23 +498,23 @@ local function recoverModemSlot()
   return false
 end
 
-local function turnRightRaw()
+function turnRightRaw()
   turtle.turnRight()
   heading = (heading + 1) % 4
 end
 
-local function turnLeftRaw()
+function turnLeftRaw()
   turtle.turnLeft()
   heading = (heading + 3) % 4
 end
 
-local function faceRaw(targetHeading)
+function faceRaw(targetHeading)
   while heading ~= targetHeading do
     turnRightRaw()
   end
 end
 
-local function tryDigEnderChestHere(inspectFn, digFn, slot, label)
+function tryDigEnderChestHere(inspectFn, digFn, slot, label)
   local ok, data = inspectFn()
 
   if not ok or not data or not isEnderChestBlockName(data.name) then
@@ -535,7 +535,7 @@ local function tryDigEnderChestHere(inspectFn, digFn, slot, label)
   return moveMatchingItemToSlot(isReservedEnderChestItemName, slot, label)
 end
 
-local function recoverFrontEnderChest(slot, label)
+function recoverFrontEnderChest(slot, label)
   local ok, data = turtle.inspect()
 
   if not ok or not data or not isEnderChestBlockName(data.name) then
@@ -566,7 +566,7 @@ local function recoverFrontEnderChest(slot, label)
   return moveMatchingItemToSlot(isReservedEnderChestItemName, slot, label)
 end
 
-local function recoverAdjacentEnderChest(slot, label)
+function recoverAdjacentEnderChest(slot, label)
   if moveMatchingItemToSlot(isReservedEnderChestItemName, slot, label) then
     return true
   end
@@ -594,7 +594,7 @@ local function recoverAdjacentEnderChest(slot, label)
   return false
 end
 
-local function repairStartupEquipment()
+function repairStartupEquipment()
   recoverModemSlot()
   recoverScannerUpgrade()
   recoverPickaxeUpgrade()
@@ -608,7 +608,7 @@ local function repairStartupEquipment()
   recoverFrontEnderChest(FUEL_CHEST_SLOT, "Start-Front-Ender-Chest")
 end
 
-local function locateGps(required)
+function locateGps(required)
   if not gps or not gps.locate then
     if required then error("GPS API nicht verfuegbar.") end
     return nil
@@ -650,7 +650,7 @@ local function locateGps(required)
   return nil
 end
 
-local function tableCount(t)
+function tableCount(t)
   local n = 0
   for _,count in pairs(t) do
     n = n + count
@@ -658,7 +658,7 @@ local function tableCount(t)
   return n
 end
 
-local function isInventoryBlockName(name)
+function isInventoryBlockName(name)
   if not name then return false end
 
   local lower = string.lower(name)
@@ -668,7 +668,7 @@ local function isInventoryBlockName(name)
     or string.find(lower, "sophisticatedstorage", 1, true) ~= nil
 end
 
-local function headingFromDelta(dx, dz)
+function headingFromDelta(dx, dz)
   if dx == 1 and dz == 0 then return 1 end
   if dx == -1 and dz == 0 then return 3 end
   if dx == 0 and dz == 1 then return 2 end
@@ -676,7 +676,7 @@ local function headingFromDelta(dx, dz)
   return nil
 end
 
-local function headingName(h)
+function headingName(h)
   if h == 0 then return "north" end
   if h == 1 then return "east" end
   if h == 2 then return "south" end
@@ -684,7 +684,7 @@ local function headingName(h)
   return tostring(h)
 end
 
-local function gpsHeadingCalibration(context, required)
+function gpsHeadingCalibration(context, required)
   local sx, sy, sz = locateGps(required)
 
   if not sx then
@@ -750,7 +750,7 @@ local function gpsHeadingCalibration(context, required)
   return false
 end
 
-local function setupScan(radius)
+function setupScan(radius)
   local ok, result, err
 
   if scanner.scanBlocks then
@@ -772,7 +772,7 @@ local function setupScan(radius)
   return result, nil
 end
 
-local function collectInventoryPositions(blocks, maxDist)
+function collectInventoryPositions(blocks, maxDist)
   local positions = {}
 
   for _,b in ipairs(blocks) do
@@ -788,7 +788,7 @@ local function collectInventoryPositions(blocks, maxDist)
   return positions
 end
 
-local function looksLikeNether(blocks)
+function looksLikeNether(blocks)
   local netherBlocks = 0
   local totalBlocks = 0
 
@@ -805,7 +805,7 @@ local function looksLikeNether(blocks)
   return netherBlocks >= 10 or (totalBlocks > 0 and netherBlocks / totalBlocks >= 0.35)
 end
 
-local function inferMoveHeading(before, after)
+function inferMoveHeading(before, after)
   local scores = {}
 
   for _,old in ipairs(before) do
@@ -844,7 +844,7 @@ local function inferMoveHeading(before, after)
   return nil
 end
 
-local function setupBackToProbeStart()
+function setupBackToProbeStart()
   for _=1,8 do
     if turtle.back() then
       return true
@@ -857,7 +857,7 @@ local function setupBackToProbeStart()
   return false
 end
 
-local function probeSideForHeading(before, side)
+function probeSideForHeading(before, side)
   if side == "right" then
     turtle.turnRight()
   else
@@ -906,7 +906,7 @@ local function probeSideForHeading(before, side)
   return (moveHeading + 1) % 4
 end
 
-local function resolveAmbiguousStartHeading(candidates)
+function resolveAmbiguousStartHeading(candidates)
   log("Auto-Ausrichtung: Fuehre kurze Seiten-Probe aus, um die Weltachse zu bestimmen.")
 
   local h = probeSideForHeading(candidates, "right")
@@ -927,7 +927,7 @@ local function resolveAmbiguousStartHeading(candidates)
   return nil
 end
 
-local function autoDetectStartHeading()
+function autoDetectStartHeading()
   local blocks, err = setupScan(1)
 
   if not blocks then
@@ -972,13 +972,13 @@ local function autoDetectStartHeading()
   return nil
 end
 
-local function fuel()
+function fuel()
   local f = turtle.getFuelLevel()
   if f == "unlimited" then return 999999999 end
   return f
 end
 
-local function fuelLimit()
+function fuelLimit()
   if turtle.getFuelLimit then
     local f = turtle.getFuelLimit()
     if f == "unlimited" then return 999999999 end
@@ -987,7 +987,7 @@ local function fuelLimit()
   return 999999999
 end
 
-local function chooseNormalTargetY()
+function chooseNormalTargetY()
   local lowestY = normalLowestY or CONFIG_LOWEST_Y
   local highestStartY = CONFIG_HIGHEST_NORMAL_TARGET_Y
 
@@ -1004,7 +1004,7 @@ local function chooseNormalTargetY()
   return target, lowestY, highestStartY
 end
 
-local function ensureTargetY()
+function ensureTargetY()
   if miningMode == "netherite" then
     if type(targetY) == "number" then return end
 
@@ -1089,7 +1089,7 @@ stop = function(msg)
   error(msg)
 end
 
-local function setup()
+function setup()
   print("========== SETUP ==========")
   print("Turtle steht am Startpunkt.")
   print("Slot 13: Ender-Modem-Modul.")
@@ -1141,7 +1141,7 @@ local function setup()
   save()
 end
 
-local function loadOrSetupState()
+function loadOrSetupState()
   if fs.exists(STATE) then
     local s = readTable(STATE)
 
@@ -1186,7 +1186,7 @@ local function loadOrSetupState()
   ensureTargetY()
 end
 
-local function isOre(name)
+function isOre(name)
   if not name then return false end
 
   if wantedOrePatterns then
@@ -1222,7 +1222,7 @@ local function isOre(name)
   return false
 end
 
-local function isJunkItem(name)
+function isJunkItem(name)
   if not name then return false end
 
   if JUNK[name] then return true end
@@ -1234,7 +1234,7 @@ local function isJunkItem(name)
   return false
 end
 
-local function isProtectedBlock(name)
+function isProtectedBlock(name)
   if not name then return false end
 
   if isEnderStorageName(name) then
@@ -1248,12 +1248,12 @@ local function isProtectedBlock(name)
   return false
 end
 
-local function recordOreMined(name)
+function recordOreMined(name)
   oreMinedCount = oreMinedCount + 1
   minedSinceStatus[name or "unknown"] = (minedSinceStatus[name or "unknown"] or 0) + 1
 end
 
-local function statusPayload(kind)
+function statusPayload(kind)
   local mined = minedSinceStatus
 
   return {
@@ -1295,7 +1295,7 @@ local function statusPayload(kind)
   }
 end
 
-local function sendStatus(kind, resetMinute)
+function sendStatus(kind, resetMinute)
   if not openWirelessModem() then
     log("Kein Ender/Wireless Modem gefunden.")
     return false
@@ -1317,25 +1317,25 @@ local function sendStatus(kind, resetMinute)
   return true
 end
 
-local function sendAlert(alert, kind)
+function sendAlert(alert, kind)
   minerAlert = alert
   return sendStatus(kind or alert or "alert", false)
 end
 
-local function clearAlert(alert)
+function clearAlert(alert)
   if not alert or minerAlert == alert then
     minerAlert = nil
   end
 end
 
-local function commandTargetsThisMiner(cmd)
+function commandTargetsThisMiner(cmd)
   local id = computerId()
   local target = cmd.targetId or cmd.minerId or cmd.id
 
   return target == nil or target == id or target == "all" or target == "*"
 end
 
-local function commandValue(cmd, key)
+function commandValue(cmd, key)
   if cmd[key] ~= nil then return cmd[key] end
   if type(cmd.target) == "table" then return cmd.target[key] end
   if type(cmd.coords) == "table" then return cmd.coords[key] end
@@ -1344,7 +1344,7 @@ local function commandValue(cmd, key)
   return nil
 end
 
-local function normalizeOreName(name)
+function normalizeOreName(name)
   if not name then return nil end
 
   local text = string.lower(tostring(name))
@@ -1361,7 +1361,7 @@ local function normalizeOreName(name)
   return "minecraft:"..text.."_ore"
 end
 
-local function oreSetFromCommand(value)
+function oreSetFromCommand(value)
   if value == nil then return nil, false end
 
   local result = {}
@@ -1416,7 +1416,7 @@ local function oreSetFromCommand(value)
   return nil, true
 end
 
-local function orePatternsFromCommand(value)
+function orePatternsFromCommand(value)
   if value == nil then return nil, false end
 
   local patterns = {}
@@ -1449,7 +1449,7 @@ local function orePatternsFromCommand(value)
   return patterns, true
 end
 
-local function areaValue(cmd, ...)
+function areaValue(cmd, ...)
   local keys = { ... }
 
   for _,key in ipairs(keys) do
@@ -1460,7 +1460,7 @@ local function areaValue(cmd, ...)
   return nil
 end
 
-local function setMineArea(ax1, az1, ax2, az2)
+function setMineArea(ax1, az1, ax2, az2)
   mineMinX = math.min(ax1, ax2)
   mineMaxX = math.max(ax1, ax2)
   mineMinZ = math.min(az1, az2)
@@ -1474,14 +1474,14 @@ local function setMineArea(ax1, az1, ax2, az2)
   mineCenterZ = mineMinZ + (math.floor(id / width) % depth)
 end
 
-local function clearMineArea()
+function clearMineArea()
   mineMinX = nil
   mineMaxX = nil
   mineMinZ = nil
   mineMaxZ = nil
 end
 
-local function inMineArea(tx, tz)
+function inMineArea(tx, tz)
   if mineMinX then
     return tx >= mineMinX and tx <= mineMaxX and tz >= mineMinZ and tz <= mineMaxZ
   end
@@ -1490,7 +1490,7 @@ local function inMineArea(tx, tz)
     and math.abs(tz - mineCenterZ) <= MAX_DISTANCE_FROM_SHAFT
 end
 
-local function clampToMineArea(tx, tz)
+function clampToMineArea(tx, tz)
   if not mineMinX then return tx, tz end
 
   if tx < mineMinX then tx = mineMinX end
@@ -1519,7 +1519,7 @@ function nearestPointInMineArea(tx, tz)
   return tx, tz
 end
 
-local function applyAdminCommand(sender, cmd)
+function applyAdminCommand(sender, cmd)
   if type(cmd) == "string" then
     cmd = { command=cmd }
   end
@@ -1617,7 +1617,7 @@ local function applyAdminCommand(sender, cmd)
   return true
 end
 
-local function pollAdminCommands(timeout)
+function pollAdminCommands(timeout)
   if not openWirelessModem() then return false end
 
   local sender, message = rednet.receive(ADMIN_PROTOCOL, timeout or 0)
@@ -1631,7 +1631,7 @@ local function pollAdminCommands(timeout)
   return applied
 end
 
-local function sendMinuteStatusIfDue()
+function sendMinuteStatusIfDue()
   if os.epoch("utc") - lastStatusAt >= STATUS_INTERVAL * 1000 then
     sendStatus("minute", true)
     pollAdminCommands(COMMAND_WAIT)
@@ -1640,7 +1640,7 @@ local function sendMinuteStatusIfDue()
   end
 end
 
-local function waitForAdminStart()
+function waitForAdminStart()
   minerState = "waiting"
 
   if not openWirelessModem() then
@@ -1661,19 +1661,19 @@ local function waitForAdminStart()
   minerState = "mining"
 end
 
-local function turnRight()
+function turnRight()
   turtle.turnRight()
   heading = (heading + 1) % 4
   save()
 end
 
-local function face(h)
+function face(h)
   while heading ~= h do
     turnRight()
   end
 end
 
-local function redstoneSideForHeading(worldHeading)
+function redstoneSideForHeading(worldHeading)
   local diff = (worldHeading - heading) % 4
 
   if diff == 0 then return "front" end
@@ -1682,12 +1682,12 @@ local function redstoneSideForHeading(worldHeading)
   return "left"
 end
 
-local function hasTopCalibrationSignal()
+function hasTopCalibrationSignal()
   local side = redstoneSideForHeading(storageHeading)
   return redstone.getInput(side), side
 end
 
-local function calibrateTopFromRedstone(context)
+function calibrateTopFromRedstone(context)
   if x ~= 0 or z ~= 0 or not topY then
     return false
   end
@@ -1711,7 +1711,7 @@ end
 
 local refuelFromEnderChestFull
 
-local function checkFuel()
+function checkFuel()
   if fuel() < LOW_FUEL_STOP then
     if refuelFromEnderChestFull then
       refuelFromEnderChestFull()
@@ -1730,7 +1730,7 @@ local function checkFuel()
   end
 end
 
-local function updateForwardPosition()
+function updateForwardPosition()
   if heading == 0 then
     z = z - 1
   elseif heading == 1 then
@@ -1795,7 +1795,7 @@ function forwardStaysInMineArea()
   return distanceFromMineArea(nx, nz) < distanceFromMineArea(x, z)
 end
 
-local function clean()
+function clean()
   local old = turtle.getSelectedSlot()
 
   for i=1,WORK_SLOT_LAST do
@@ -1809,14 +1809,14 @@ local function clean()
   turtle.select(old)
 end
 
-local function inventoryFull()
+function inventoryFull()
   for i=1,WORK_SLOT_LAST do
     if turtle.getItemCount(i) == 0 then return false end
   end
   return true
 end
 
-local function hasValuableItems()
+function hasValuableItems()
   for i=1,WORK_SLOT_LAST do
     local item = turtle.getItemDetail(i)
     if item and not isJunkItem(item.name) then return true end
@@ -1824,7 +1824,7 @@ local function hasValuableItems()
   return false
 end
 
-local function printValuables()
+function printValuables()
   local found = false
   log("Inventar-Check:")
 
@@ -1841,7 +1841,7 @@ local function printValuables()
   end
 end
 
-local function digFrontCanFail()
+function digFrontCanFail()
   ensureMiningUpgrades("front")
 
   local tries = 0
@@ -1885,7 +1885,7 @@ local function digFrontCanFail()
   return true
 end
 
-local function digUpCanFail()
+function digUpCanFail()
   ensureMiningUpgrades("up")
 
   local tries = 0
@@ -1929,7 +1929,7 @@ local function digUpCanFail()
   return true
 end
 
-local function digDownCanFail()
+function digDownCanFail()
   ensureMiningUpgrades("down")
 
   local tries = 0
@@ -1973,7 +1973,7 @@ local function digDownCanFail()
   return true
 end
 
-local function rawForward(allowAboveTarget, entityAvoid)
+function rawForward(allowAboveTarget, entityAvoid)
   checkFuel()
 
   if y > targetY and not allowAboveTarget then
@@ -2031,7 +2031,7 @@ local function rawForward(allowAboveTarget, entityAvoid)
   return true
 end
 
-local function rawUp()
+function rawUp()
   checkFuel()
 
   if not digUpCanFail() then return false end
@@ -2058,7 +2058,7 @@ local function rawUp()
   return true
 end
 
-local function rawDown()
+function rawDown()
   checkFuel()
 
   if not digDownCanFail() then return false end
@@ -2087,7 +2087,7 @@ end
 
 local tryUpWithBypass
 
-local function trySideBypassUp()
+function trySideBypassUp()
   log("Nach oben blockiert. Versuche seitlich auszuweichen.")
 
   local startHeading = heading
@@ -2118,22 +2118,22 @@ tryUpWithBypass = function()
   return trySideBypassUp()
 end
 
-local function up()
+function up()
   if tryUpWithBypass() then return end
   stop("Kann nicht nach oben fahren.")
 end
 
-local function down()
+function down()
   if not rawDown() then stop("Kann nicht nach unten fahren.") end
 end
 
-local function forwardStrict()
+function forwardStrict()
   if not rawForward(false) then
     stop("Kann nicht streng nach vorne fahren.")
   end
 end
 
-local function tryBypassUp()
+function tryBypassUp()
   log("Versuche Ausweichroute: hoch -> 2 vor -> runter")
 
   if y > targetY then
@@ -2188,7 +2188,7 @@ local function tryBypassUp()
   return true
 end
 
-local function forwardTravel(remaining)
+function forwardTravel(remaining)
   if rawForward(false, true) then
     return true
   end
@@ -2239,7 +2239,7 @@ function descendToTargetWithSidestep()
   return true
 end
 
-local function moveBackStrict()
+function moveBackStrict()
   local old = heading
   face((old + 2) % 4)
 
@@ -2250,12 +2250,12 @@ local function moveBackStrict()
   face(old)
 end
 
-local function minimumFuelForTripFromTop()
+function minimumFuelForTripFromTop()
   local shaftDistance = math.abs(topY - targetY)
   return shaftDistance * 2 + RETURN_FUEL_BUFFER
 end
 
-local function waitForTopRedstoneRelease()
+function waitForTopRedstoneRelease()
   if x ~= 0 or z ~= 0 or y ~= topY then
     return
   end
@@ -2266,7 +2266,7 @@ local function waitForTopRedstoneRelease()
   end
 end
 
-local function refuelFromFrontFull()
+function refuelFromFrontFull()
   if x ~= 0 or z ~= 0 or y ~= topY then
     stop("Tanken geht nur oben an der Fuel-Kiste.")
   end
@@ -2310,7 +2310,7 @@ local function refuelFromFrontFull()
   end
 end
 
-local function storeToBack()
+function storeToBack()
   log("Lagere Items in Kiste HINTER der Turtle.")
 
   local old = heading
@@ -2330,7 +2330,7 @@ local function storeToBack()
   face(old)
 end
 
-local function requireReservedChest(slot, label)
+function requireReservedChest(slot, label)
   if slot == MODEM_SLOT then
     recoverModemSlot()
 
@@ -2370,7 +2370,7 @@ local function requireReservedChest(slot, label)
   return item.name
 end
 
-local function placeReusableChest(slot, label)
+function placeReusableChest(slot, label)
   local chestName = requireReservedChest(slot, label)
   turtle.select(slot)
 
@@ -2400,7 +2400,7 @@ local function placeReusableChest(slot, label)
   return chestName
 end
 
-local function recoverReusableChest(slot, label, chestName)
+function recoverReusableChest(slot, label, chestName)
   turtle.select(slot)
 
   while turtle.detect() do
@@ -2440,7 +2440,7 @@ local function recoverReusableChest(slot, label, chestName)
   stop(label.." konnte nach dem Abbauen nicht in Slot "..slot.." wiedergefunden werden.")
 end
 
-local function swapReservedChestSlots()
+function swapReservedChestSlots()
   local tempSlot = findEmptySlot(1, WORK_SLOT_LAST)
 
   if not tempSlot then
@@ -2465,7 +2465,7 @@ local function swapReservedChestSlots()
   end
 end
 
-local function tryRefuelFromReusableChest(slot, label)
+function tryRefuelFromReusableChest(slot, label)
   log("Tanke aus wiederverwendbarer "..label.." aus Slot "..slot..".")
 
   local chestName = placeReusableChest(slot, label)
@@ -2512,7 +2512,7 @@ local function tryRefuelFromReusableChest(slot, label)
   return true, gainedFuel
 end
 
-local function unloadToEnderChest()
+function unloadToEnderChest()
   clean()
   log("Entlade in wiederverwendbare Ender-Chest aus Slot "..UNLOAD_CHEST_SLOT..".")
 
@@ -2576,7 +2576,7 @@ refuelFromEnderChestFull = function()
   log("Turtle-Fuel voll: "..fuel().." / "..fuelLimit())
 end
 
-local function scannerFuel()
+function scannerFuel()
   if scanner.getFuelLevel then
     local ok, f = pcall(function() return scanner.getFuelLevel() end)
     if ok and type(f) == "number" then return f end
@@ -2584,7 +2584,7 @@ local function scannerFuel()
   return nil
 end
 
-local function scannerMaxFuel()
+function scannerMaxFuel()
   if scanner.getMaxFuelLevel then
     local ok, f = pcall(function() return scanner.getMaxFuelLevel() end)
     if ok and type(f) == "number" then return f end
@@ -2592,12 +2592,12 @@ local function scannerMaxFuel()
   return nil
 end
 
-local function scanCost(radius)
+function scanCost(radius)
   local side = radius * 2 + 1
   return side * side * side
 end
 
-local function bestRadiusByFuel()
+function bestRadiusByFuel()
   local sfuel = scannerFuel()
 
   if not sfuel then
@@ -2617,11 +2617,11 @@ local function bestRadiusByFuel()
   return best
 end
 
-local function targetKey(tx,ty,tz)
+function targetKey(tx,ty,tz)
   return tostring(tx)..","..tostring(ty)..","..tostring(tz)
 end
 
-local function scan()
+function scan()
   while true do
     local sfuel = scannerFuel()
     local smax = scannerMaxFuel()
@@ -2650,7 +2650,7 @@ local function scan()
   end
 end
 
-local function nearestOre()
+function nearestOre()
   local blocks = scan()
   local best, bestDist = nil, 999999
   local oreCount = 0
@@ -2684,7 +2684,7 @@ local function nearestOre()
   return best
 end
 
-local function goHorizontal(tx, tz, allowOutside, allowAboveTarget)
+function goHorizontal(tx, tz, allowOutside, allowAboveTarget)
   if y > targetY and not allowAboveTarget then
     log("Seitliche Bewegung ueber Ziel-Y verhindert. Fahre zuerst runter zu Ziel-Y.")
 
@@ -2789,7 +2789,7 @@ local function goHorizontal(tx, tz, allowOutside, allowAboveTarget)
   travelOrStop(tx, tz)
 end
 
-local function goTo(tx, ty, tz)
+function goTo(tx, ty, tz)
   log("Gehe zu x="..tx.." y="..ty.." z="..tz.." von x="..x.." y="..y.." z="..z)
 
   if not descendToTargetWithSidestep() then
@@ -2811,7 +2811,7 @@ local function goTo(tx, ty, tz)
   log("Ziel erreicht: x="..x.." y="..y.." z="..z)
 end
 
-local function recoveryTargetForMiner()
+function recoveryTargetForMiner()
   if not recoveryX or not recoveryY or not recoveryZ then
     return nil
   end
@@ -2900,7 +2900,7 @@ end
 local unload
 local mineAdjacentOres
 
-local function returnFuelNeeded()
+function returnFuelNeeded()
   local needed = 0
   local tempY = y
 
@@ -2915,7 +2915,7 @@ local function returnFuelNeeded()
   return needed + RETURN_FUEL_BUFFER
 end
 
-local function ensureCanReturn()
+function ensureCanReturn()
   local needed = returnFuelNeeded()
 
   if fuel() < needed and not (x==homeX and z==homeZ and y==topY) then
@@ -2926,7 +2926,7 @@ local function ensureCanReturn()
   end
 end
 
-local function mineFrontOreAndEnter()
+function mineFrontOreAndEnter()
   local ok, data = turtle.inspect()
 
   if not ok or not data or not isOre(data.name) then
@@ -2949,7 +2949,7 @@ local function mineFrontOreAndEnter()
   return true
 end
 
-local function mineUpOreAndEnter()
+function mineUpOreAndEnter()
   local ok, data = turtle.inspectUp()
 
   if not ok or not data or not isOre(data.name) then
@@ -2967,7 +2967,7 @@ local function mineUpOreAndEnter()
   return true
 end
 
-local function mineDownOreAndEnter()
+function mineDownOreAndEnter()
   local ok, data = turtle.inspectDown()
 
   if not ok or not data or not isOre(data.name) then
@@ -2985,7 +2985,7 @@ local function mineDownOreAndEnter()
   return true
 end
 
-local function mineScannedOre(ore)
+function mineScannedOre(ore)
   local tx = x + ore.x
   local ty = y + ore.y
   local tz = z + ore.z
@@ -3111,7 +3111,7 @@ mineAdjacentOres = function()
   face(startHeading)
 end
 
-local function descendToTarget()
+function descendToTarget()
   if x == homeX and z == homeZ and y > targetY then
     log("Fahre runter von Y "..y.." zu Ziel-Y "..targetY)
 
@@ -3136,7 +3136,7 @@ local function descendToTarget()
   end
 end
 
-local function alignToTargetY()
+function alignToTargetY()
   if not descendToTargetWithSidestep() then
     stop("Abstieg zu Ziel-Y blockiert.")
   end
@@ -3147,7 +3147,7 @@ local function alignToTargetY()
   end
 end
 
-local function tooFarFromShaft()
+function tooFarFromShaft()
   return not inMineArea(x, z)
 end
 
@@ -3251,7 +3251,7 @@ function travelRandomMoveTarget(tx, tz, firstAxisIsX)
   return movedTotal
 end
 
-local function randomMove()
+function randomMove()
   ensureCanReturn()
 
   if not descendToTargetWithSidestep() then
@@ -3335,7 +3335,7 @@ function miningLoopStep()
   end
 end
 
-local function miningLoop()
+function miningLoop()
   minerState = "mining"
   log("Mining-Loop startet.")
 
@@ -3360,7 +3360,7 @@ local function miningLoop()
   end
 end
 
-local function main()
+function main()
   loadOrSetupState()
   log("Gestartet.")
   log("Position: x="..x.." y="..y.." z="..z.." heading="..heading)
