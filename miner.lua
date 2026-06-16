@@ -6,37 +6,37 @@
 -- Fuel-Kiste VOR der Turtle, Lager-Kiste HINTER der Turtle.
 -- Turtle schaut beim Start zur Fuel-Kiste.
 
-local STATE = "miner_state"
-local STATE_VERSION = 19
+STATE = "miner_state"
+STATE_VERSION = 19
 
-local MAX_SCAN_RADIUS = 15
-local MIN_SCAN_RADIUS = 4
+MAX_SCAN_RADIUS = 15
+MIN_SCAN_RADIUS = 4
 
-local LOW_FUEL_STOP = 20
-local RETURN_FUEL_BUFFER = 120
-local FUEL_CHEST_EMPTY_RETRIES = 50
-local SCAN_WAIT = 3
-local MAX_VEIN_STEPS = 128
+LOW_FUEL_STOP = 20
+RETURN_FUEL_BUFFER = 120
+FUEL_CHEST_EMPTY_RETRIES = 50
+SCAN_WAIT = 3
+MAX_VEIN_STEPS = 128
 
-local RANDOM_MOVE_MIN = 6
-local RANDOM_MOVE_MAX = 18
-local MIN_START_DEPTH_BELOW_TOP = 20
-local MAX_DISTANCE_FROM_SHAFT = 70
-local STATUS_INTERVAL = 120
-local COMMAND_WAIT = 5
-local ADMIN_PROTOCOL = "miner_admin"
-local MODEM_SLOT = 13
-local UNLOAD_CHEST_SLOT = 15
-local FUEL_CHEST_SLOT = 16
-local WORK_SLOT_LAST = 12
+RANDOM_MOVE_MIN = 6
+RANDOM_MOVE_MAX = 18
+MIN_START_DEPTH_BELOW_TOP = 20
+MAX_DISTANCE_FROM_SHAFT = 70
+STATUS_INTERVAL = 120
+COMMAND_WAIT = 5
+ADMIN_PROTOCOL = "miner_admin"
+MODEM_SLOT = 13
+UNLOAD_CHEST_SLOT = 15
+FUEL_CHEST_SLOT = 16
+WORK_SLOT_LAST = 12
 
-local CONFIG_TOP_Y = 63
-local CONFIG_LOWEST_Y = -50
-local CONFIG_HIGHEST_NORMAL_TARGET_Y = 40
-local CONFIG_NETHERITE_TARGET_Y = 15
-local CONFIG_HEADING = 0
+CONFIG_TOP_Y = 63
+CONFIG_LOWEST_Y = -50
+CONFIG_HIGHEST_NORMAL_TARGET_Y = 40
+CONFIG_NETHERITE_TARGET_Y = 15
+CONFIG_HEADING = 0
 
-local JUNK = {
+JUNK = {
   ["minecraft:stone"]=true,
   ["minecraft:cobblestone"]=true,
   ["minecraft:deepslate"]=true,
@@ -55,7 +55,7 @@ local JUNK = {
   ["minecraft:calcite"]=true
 }
 
-local TARGET_ORES = {
+TARGET_ORES = {
   ["minecraft:iron_ore"]=true,
   ["minecraft:deepslate_iron_ore"]=true,
   ["minecraft:gold_ore"]=true,
@@ -79,11 +79,11 @@ local TARGET_ORES = {
   ["extendedcrafting:draconium_ore"]=true
 }
 
-local NETHERITE_TARGETS = {
+NETHERITE_TARGETS = {
   ["minecraft:ancient_debris"]=true
 }
 
-local DRACONIUM_ORES = {
+DRACONIUM_ORES = {
   ["draconicevolution:draconium_ore"]=true,
   ["draconicevolution:deepslate_draconium_ore"]=true,
   ["draconicevolution:end_draconium_ore"]=true,
@@ -91,7 +91,7 @@ local DRACONIUM_ORES = {
   ["extendedcrafting:draconium_ore"]=true
 }
 
-local NETHER_BLOCKS = {
+NETHER_BLOCKS = {
   ["minecraft:netherrack"]=true,
   ["minecraft:basalt"]=true,
   ["minecraft:smooth_basalt"]=true,
@@ -105,14 +105,14 @@ local NETHER_BLOCKS = {
   ["minecraft:ancient_debris"]=true
 }
 
-local NETHERITE_JUNK = {
+NETHERITE_JUNK = {
   ["minecraft:nether_quartz_ore"]=true,
   ["minecraft:nether_gold_ore"]=true,
   ["minecraft:quartz"]=true,
   ["minecraft:gold_nugget"]=true
 }
 
-local TARGET_MODS = {
+TARGET_MODS = {
   ["ae2"]=true,
   ["appliedenergistics2"]=true,
   ["appeng"]=true
@@ -130,42 +130,42 @@ local TARGET_MODS = {
 -- 2 = south
 -- 3 = west
 
-local x, y, z = 0, 0, 0
-local homeX, homeZ = 0, 0
-local mineCenterX, mineCenterZ = 0, 0
-local mineMinX, mineMaxX, mineMinZ, mineMaxZ = nil, nil, nil, nil
-local heading = 0
-local storageHeading = 0
-local fuelHeading = 2
-local topY, targetY = nil, nil
-local normalLowestY = CONFIG_LOWEST_Y
-local miningMode = "normal"
-local wantedOres = nil
-local wantedOrePatterns = nil
-local recoveryX, recoveryY, recoveryZ = nil, nil, nil
-local recoveryRadius = 6
-local recoveryTravelMode = false
+x, y, z = 0, 0, 0
+homeX, homeZ = 0, 0
+mineCenterX, mineCenterZ = 0, 0
+mineMinX, mineMaxX, mineMinZ, mineMaxZ = nil, nil, nil, nil
+heading = 0
+storageHeading = 0
+fuelHeading = 2
+topY, targetY = nil, nil
+normalLowestY = CONFIG_LOWEST_Y
+miningMode = "normal"
+wantedOres = nil
+wantedOrePatterns = nil
+recoveryX, recoveryY, recoveryZ = nil, nil, nil
+recoveryRadius = 6
+recoveryTravelMode = false
 
-local oreMinedCount = 0
-local minedSinceStatus = {}
-local veinSteps = 0
-local skippedTargets = {}
-local adminId = nil
-local modemSide = nil
-local modemEquipped = false
-local lastStatusAt = 0
-local adminStartReceived = false
-local pendingUnload = false
-local pendingRefuel = false
-local minerState = "boot"
-local minerAlert = nil
-local lastCommand = nil
-local lastCommandSeq = nil
-local goToRecoveryIfConfigured = nil
-local fatalRecoveryHandler = nil
-local inFatalRecovery = false
+oreMinedCount = 0
+minedSinceStatus = {}
+veinSteps = 0
+skippedTargets = {}
+adminId = nil
+modemSide = nil
+modemEquipped = false
+lastStatusAt = 0
+adminStartReceived = false
+pendingUnload = false
+pendingRefuel = false
+minerState = "boot"
+minerAlert = nil
+lastCommand = nil
+lastCommandSeq = nil
+goToRecoveryIfConfigured = nil
+fatalRecoveryHandler = nil
+inFatalRecovery = false
 
-local scanner = peripheral.find("geoScanner") or peripheral.find("geo_scanner")
+scanner = peripheral.find("geoScanner") or peripheral.find("geo_scanner")
 
 math.randomseed(os.epoch("utc"))
 
@@ -186,8 +186,8 @@ function readTable(path)
   return data
 end
 
-local save
-local stop
+save = nil
+stop = nil
 
 function computerId()
   if os.getComputerID then return os.getComputerID() end
@@ -1709,7 +1709,7 @@ function calibrateTopFromRedstone(context)
   return true
 end
 
-local refuelFromEnderChestFull
+refuelFromEnderChestFull = nil
 
 function checkFuel()
   if fuel() < LOW_FUEL_STOP then
@@ -2085,7 +2085,7 @@ function rawDown()
   return true
 end
 
-local tryUpWithBypass
+tryUpWithBypass = nil
 
 function trySideBypassUp()
   log("Nach oben blockiert. Versuche seitlich auszuweichen.")
@@ -2897,8 +2897,8 @@ fatalRecoveryHandler = function(reason, missingSlot)
   return false
 end
 
-local unload
-local mineAdjacentOres
+unload = nil
+mineAdjacentOres = nil
 
 function returnFuelNeeded()
   local needed = 0
@@ -3380,7 +3380,7 @@ function main()
   miningLoop()
 end
 
-local ok, err = pcall(main)
+ok, err = pcall(main)
 
 if not ok then
   if fatalRecoveryHandler and fatalRecoveryHandler("Main-Crash: "..tostring(err), nil) then
