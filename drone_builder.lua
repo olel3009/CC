@@ -1,11 +1,10 @@
 -- Drone Builder Turtle
--- Baut neue Miner-Turtles aus Material in einer Kiste hinter der Builder-Turtle.
+-- Baut neue Miner-Turtles aus Material im Inventar der Builder-Turtle.
 --
 -- Erwartung:
--- - Kiste direkt HINTER der Builder-Turtle.
 -- - Vorne ist Platz fuer die neue Turtle.
 -- - Rechts ist Platz, damit der Builder nach jeder Drone eine Position weitergehen kann.
--- - Die Kiste enthaelt pro Drone:
+-- - Das Builder-Inventar enthaelt pro Drone:
 --   * 1 Turtle
 --   * 1 Geo/Ore Scanner
 --   * 1 Pickaxe Upgrade
@@ -144,34 +143,6 @@ local function countEnderChests()
   return total
 end
 
-local function countMatchingItems(testFn)
-  local total = 0
-
-  for slot=1,16 do
-    local detail = item(slot)
-
-    if detail and testFn(detail) then
-      total = total + turtle.getItemCount(slot)
-    end
-  end
-
-  return total
-end
-
-local function currentBlockerInfo()
-  for slot=1,16 do
-    local detail = item(slot)
-
-    if detail and not isSpecialItem(detail) then
-      return detail.name, countMatchingItems(function(other)
-        return not isSpecialItem(other) and other.name == detail.name
-      end)
-    end
-  end
-
-  return nil, 0
-end
-
 local function snapshotInventory()
   local snapshot = {}
 
@@ -203,107 +174,29 @@ local function findChangedSlot(snapshot)
   return nil
 end
 
-local function hasRequirements()
+local function missingRequirements()
+  local missing = {}
   local turtleSlot = findSlot(isTurtleItem)
   local scannerSlot = findSlot(isScannerItem)
   local pickaxeSlot = findSlot(isPickaxeItem)
   local modemSlot = findSlot(isModemItem)
   local blockerSlot = findBlockerSlotFixed()
 
-  return turtleSlot and scannerSlot and pickaxeSlot and modemSlot and countEnderChests() >= 2 and blockerSlot
-end
+  if not turtleSlot then table.insert(missing, "1 Turtle") end
+  if not scannerSlot then table.insert(missing, "1 Geo/Ore Scanner") end
+  if not pickaxeSlot then table.insert(missing, "1 Pickaxe Upgrade") end
+  if not modemSlot then table.insert(missing, "1 Wireless/Ender Modem") end
+  if countEnderChests() < 2 then table.insert(missing, "2 Ender-Chests") end
+  if not blockerSlot then table.insert(missing, tostring(BLOCKER_COUNT).." gleiche Dummy-Items") end
 
-local function shouldKeepPulledItem(slot)
-  local detail = item(slot)
-
-  if not detail then return false end
-  if isTurtleItem(detail) then return countMatchingItems(isTurtleItem) <= 1 end
-  if isScannerItem(detail) then return countMatchingItems(isScannerItem) <= 1 end
-  if isPickaxeItem(detail) then return countMatchingItems(isPickaxeItem) <= 1 end
-  if isModemItem(detail) then return countMatchingItems(isModemItem) <= 1 end
-  if isEnderStorageItem(detail) then return countEnderChests() <= 2 end
-
-  local blockerName, blockerCount = currentBlockerInfo()
-
-  if blockerCount > BLOCKER_COUNT then
-    return false
-  end
-
-  return not blockerName or detail.name == blockerName
-end
-
-local function faceSupply()
-  turtle.turnRight()
-  turtle.turnRight()
-end
-
-local function faceBuild()
-  turtle.turnRight()
-  turtle.turnRight()
-end
-
-local function pullOneFromSupply()
-  local snapshot = snapshotInventory()
-
-  faceSupply()
-  local ok = turtle.suck(1)
-  faceBuild()
-
-  if not ok then return false, false end
-
-  local pulledSlot = findChangedSlot(snapshot)
-
-  if pulledSlot and shouldKeepPulledItem(pulledSlot) then
-    return true, true
-  end
-
-  if pulledSlot then
-    turtle.select(pulledSlot)
-    faceSupply()
-    turtle.drop(1)
-    faceBuild()
-  end
-
-  return true, false
+  return missing
 end
 
 local function ensureRequirements(droneIndex)
-  local pulls = 0
-  local rejected = 0
+  local missing = missingRequirements()
 
-  while not hasRequirements() do
-    local gotItem, keptItem = pullOneFromSupply()
-
-    if not gotItem then
-      error("Kiste hinten hat nicht genug Material fuer Drone #"..droneIndex..".")
-    end
-
-    pulls = pulls + 1
-    if keptItem then
-      rejected = 0
-    else
-      rejected = rejected + 1
-    end
-
-    if pulls > 512 then
-      error("Zu viele Items gezogen, aber Requirements fehlen weiter. Pruefe Item-Namen und Kisteninhalt.")
-    end
-
-    if rejected > 64 then
-      error("Kiste gibt nur nicht benoetigte Items aus. Sortiere die benoetigten Items weiter nach vorne oder mische die Kiste.")
-    end
-
-    local empty = false
-    for slot=1,16 do
-      if turtle.getItemCount(slot) == 0 then
-        empty = true
-        break
-      end
-    end
-
-    if not empty and not hasRequirements() then
-      error("Builder-Inventar voll, aber Requirements fehlen. Lege nur Drone-Material und Dummy-Blocker in die Kiste.")
-    end
+  if #missing > 0 then
+    error("Material fuer Drone #"..droneIndex.." fehlt im Builder-Inventar: "..table.concat(missing, ", "))
   end
 end
 
@@ -496,7 +389,7 @@ end
 local count = askCount()
 
 log("Baue "..count.." Dronen.")
-log("Kiste muss hinter mir sein; Bauplaetze vorne und rechts frei halten.")
+log("Material muss im Builder-Inventar liegen; Bauplaetze vorne und rechts frei halten.")
 
 for i=1,count do
   log("Drone #"..i.." vorbereiten.")
