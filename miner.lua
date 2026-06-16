@@ -1462,6 +1462,23 @@ function sendStatus(kind, resetMinute)
   return true
 end
 
+function sendStatusKeepModem(kind, resetMinute)
+  if not openWirelessModem() then
+    log("Kein Ender/Wireless Modem gefunden.")
+    return false
+  end
+
+  locateGps(false)
+  rednet.broadcast(statusPayload(kind), ADMIN_PROTOCOL)
+
+  if resetMinute then
+    minedSinceStatus = {}
+    lastStatusAt = os.epoch("utc")
+  end
+
+  return true
+end
+
 function sendAlert(alert, kind)
   minerAlert = alert
   return sendStatus(kind or alert or "alert", false)
@@ -1846,21 +1863,28 @@ function waitForRecoveryCoords(reason, missingSlot)
   debugLog("REC wait coords reason="..tostring(reason).." slot="..tostring(missingSlot))
   local lastWaitStatusAt = 0
 
+  if not openWirelessModem() then
+    debugLog("REC wait no modem at start")
+  end
+
   while not (recoveryX and recoveryY and recoveryZ) do
     save()
     debugLog("REC need coords rx="..tostring(recoveryX).." ry="..tostring(recoveryY).." rz="..tostring(recoveryZ))
 
     if os.epoch("utc") - lastWaitStatusAt >= 10000 then
-      sendStatus("missing_recovery_coords", false)
+      sendStatusKeepModem("missing_recovery_coords", false)
       lastWaitStatusAt = os.epoch("utc")
     end
 
     if openWirelessModem() then
-      local sender, message = rednet.receive(ADMIN_PROTOCOL, COMMAND_WAIT)
+      local sender, message, protocol = rednet.receive(nil, COMMAND_WAIT)
 
       if sender and message then
-        debugLog("REC got cmd sender="..tostring(sender).." type="..tostring(type(message)))
-        applyAdminCommand(sender, message)
+        debugLog("REC got msg sender="..tostring(sender).." proto="..tostring(protocol).." type="..tostring(type(message)))
+
+        if protocol == ADMIN_PROTOCOL or type(message) == "table" then
+          applyAdminCommand(sender, message)
+        end
       else
         debugLog("REC no cmd")
       end
