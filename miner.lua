@@ -1484,6 +1484,9 @@ function commandValue(cmd, key)
   if cmd[key] ~= nil then return cmd[key] end
   if type(cmd.target) == "table" then return cmd.target[key] end
   if type(cmd.coords) == "table" then return cmd.coords[key] end
+  if type(cmd.coord) == "table" then return cmd.coord[key] end
+  if type(cmd.position) == "table" then return cmd.position[key] end
+  if type(cmd.pos) == "table" then return cmd.pos[key] end
   if type(cmd.area) == "table" then return cmd.area[key] end
   if type(cmd.bounds) == "table" then return cmd.bounds[key] end
   return nil
@@ -1712,6 +1715,12 @@ function applyAdminCommand(sender, cmd)
   local tx = tonumber(commandValue(cmd, "x"))
   local ty = tonumber(commandValue(cmd, "y"))
   local tz = tonumber(commandValue(cmd, "z"))
+  if not tx then tx = tonumber(commandValue(cmd, "recoveryX")) end
+  if not ty then ty = tonumber(commandValue(cmd, "recoveryY")) end
+  if not tz then tz = tonumber(commandValue(cmd, "recoveryZ")) end
+  if not tx then tx = tonumber(commandValue(cmd, "X")) end
+  if not ty then ty = tonumber(commandValue(cmd, "Y")) end
+  if not tz then tz = tonumber(commandValue(cmd, "Z")) end
   local rr = tonumber(commandValue(cmd, "radius") or commandValue(cmd, "spread"))
   local ax1 = areaValue(cmd, "x1", "minX", "fromX")
   local ax2 = areaValue(cmd, "x2", "maxX", "toX")
@@ -1719,6 +1728,14 @@ function applyAdminCommand(sender, cmd)
   local az2 = areaValue(cmd, "z2", "maxZ", "toZ")
 
   if action == "set_recovery" or action == "recovery" or action == "recover" then
+    debugLog("REC cmd raw x="..tostring(commandValue(cmd, "x")).." y="..tostring(commandValue(cmd, "y")).." z="..tostring(commandValue(cmd, "z")).." rx="..tostring(commandValue(cmd, "recoveryX")).." ry="..tostring(commandValue(cmd, "recoveryY")).." rz="..tostring(commandValue(cmd, "recoveryZ")).." r="..tostring(rr))
+
+    if not tx or not ty or not tz then
+      debugLog("REC set rejected missing coords tx="..tostring(tx).." ty="..tostring(ty).." tz="..tostring(tz))
+      sendStatus("command_error", false)
+      return true
+    end
+
     if tx then recoveryX = math.floor(tx + 0.5) end
     if ty then recoveryY = math.floor(ty + 0.5) end
     if tz then recoveryZ = math.floor(tz + 0.5) end

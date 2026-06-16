@@ -240,6 +240,10 @@ local function recoveryCommand(targetId, command)
     x=x,
     y=y,
     z=z,
+    coords={ x=x, y=y, z=z },
+    recoveryX=x,
+    recoveryY=y,
+    recoveryZ=z,
     radius=radius
   }, duration)
 end
