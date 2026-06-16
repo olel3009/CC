@@ -14,6 +14,7 @@ local MIN_SCAN_RADIUS = 4
 
 local LOW_FUEL_STOP = 20
 local RETURN_FUEL_BUFFER = 120
+local FUEL_CHEST_EMPTY_RETRIES = 50
 local SCAN_WAIT = 3
 local MAX_VEIN_STEPS = 128
 
@@ -354,6 +355,16 @@ local function findSlotByNameTest(testFn, firstSlot, lastSlot)
   return nil, nil
 end
 
+local function findEmptySlot(firstSlot, lastSlot)
+  for i=firstSlot or 1,lastSlot or 16 do
+    if turtle.getItemCount(i) == 0 then
+      return i
+    end
+  end
+
+  return nil
+end
+
 local function moveMatchingItemToSlot(testFn, targetSlot, label)
   local targetItem = turtle.getItemDetail(targetSlot)
 
@@ -518,6 +529,37 @@ local function tryDigEnderChestHere(inspectFn, digFn, slot, label)
   return moveMatchingItemToSlot(isReservedEnderChestItemName, slot, label)
 end
 
+local function recoverFrontEnderChest(slot, label)
+  local ok, data = turtle.inspect()
+
+  if not ok or not data or not isEnderChestBlockName(data.name) then
+    return false
+  end
+
+  local targetSlot = slot
+
+  if turtle.getItemCount(targetSlot) > 0 then
+    targetSlot = findEmptySlot(1, WORK_SLOT_LAST) or findEmptySlot(1, 16)
+
+    if not targetSlot then
+      stop(label.." vorne blockiert durch Ender-Chest, aber kein freier Slot zum Einsammeln: "..data.name)
+    end
+  end
+
+  log(label.." vorne blockiert durch Ender-Chest. Sammle sie ein: "..data.name)
+  turtle.select(targetSlot)
+
+  if not turtle.dig() then
+    return false
+  end
+
+  if turtle.getItemCount(targetSlot) > 0 then
+    return true
+  end
+
+  return moveMatchingItemToSlot(isReservedEnderChestItemName, slot, label)
+end
+
 local function recoverAdjacentEnderChest(slot, label)
   if moveMatchingItemToSlot(isReservedEnderChestItemName, slot, label) then
     return true
@@ -649,6 +691,9 @@ local function gpsHeadingCalibration(context, required)
 
       if not nx then
         turtle.back()
+        for _=1,turns do
+          turtle.turnLeft()
+        end
         return false
       end
 
@@ -2279,11 +2324,22 @@ local function placeReusableChest(slot, label)
   turtle.select(slot)
 
   while turtle.detect() do
-    log("Platz fuer "..label.." vorne blockiert. Raeume Block weg.")
-    if not digFrontCanFail() then
-      sleep(5)
+    local hasBlock, data = turtle.inspect()
+
+    if hasBlock and data and isEnderChestBlockName(data.name) then
+      if not recoverFrontEnderChest(slot, label) then
+        log("Ender-Chest vorne konnte nicht eingesammelt werden. Warte.")
+        sleep(5)
+      end
+    else
+      log("Platz fuer "..label.." vorne blockiert. Raeume Block weg.")
+      if not digFrontCanFail() then
+        sleep(5)
+      end
     end
   end
+
+  turtle.select(slot)
 
   while not turtle.place() do
     log("Kann "..label.." nicht platzieren. Warte.")
@@ -2333,6 +2389,78 @@ local function recoverReusableChest(slot, label, chestName)
   stop(label.." konnte nach dem Abbauen nicht in Slot "..slot.." wiedergefunden werden.")
 end
 
+local function swapReservedChestSlots()
+  local tempSlot = findEmptySlot(1, WORK_SLOT_LAST)
+
+  if not tempSlot then
+    stop("Kann Ender-Chests nicht tauschen: kein freier Arbeitsslot.")
+  end
+
+  log("Fuel- und Entlade-Ender-Chest waren vertauscht. Tausche Slot "..UNLOAD_CHEST_SLOT.." und "..FUEL_CHEST_SLOT..".")
+
+  turtle.select(UNLOAD_CHEST_SLOT)
+  if not turtle.transferTo(tempSlot) then
+    stop("Kann Entlade-Ender-Chest nicht in temporaeren Slot "..tempSlot.." verschieben.")
+  end
+
+  turtle.select(FUEL_CHEST_SLOT)
+  if not turtle.transferTo(UNLOAD_CHEST_SLOT) then
+    stop("Kann falsche Fuel-Ender-Chest nicht nach Slot "..UNLOAD_CHEST_SLOT.." verschieben.")
+  end
+
+  turtle.select(tempSlot)
+  if not turtle.transferTo(FUEL_CHEST_SLOT) then
+    stop("Kann echte Fuel-Ender-Chest nicht nach Slot "..FUEL_CHEST_SLOT.." verschieben.")
+  end
+end
+
+local function tryRefuelFromReusableChest(slot, label)
+  log("Tanke aus wiederverwendbarer "..label.." aus Slot "..slot..".")
+
+  local chestName = placeReusableChest(slot, label)
+  local emptyFuelRounds = 0
+  local gainedFuel = false
+
+  while fuel() < fuelLimit() do
+    local before = fuel()
+
+    for i=1,WORK_SLOT_LAST do
+      turtle.select(i)
+
+      while fuel() < fuelLimit() do
+        local got = turtle.suck(64)
+        if not got then break end
+
+        if not turtle.refuel() then
+          turtle.drop()
+          break
+        end
+      end
+    end
+
+    if fuel() > before then
+      gainedFuel = true
+      emptyFuelRounds = 0
+    else
+      emptyFuelRounds = emptyFuelRounds + 1
+      log(label.." liefert gerade keinen Fuel. Versuch "..emptyFuelRounds.." / "..FUEL_CHEST_EMPTY_RETRIES..".")
+      minerAlert = "fuel_wait"
+      sendStatus("fuel_wait", false)
+
+      if emptyFuelRounds >= FUEL_CHEST_EMPTY_RETRIES then
+        recoverReusableChest(slot, label, chestName)
+        return false, gainedFuel
+      end
+
+      pollAdminCommands(COMMAND_WAIT)
+      sleep(10)
+    end
+  end
+
+  recoverReusableChest(slot, label, chestName)
+  return true, gainedFuel
+end
+
 local function unloadToEnderChest()
   clean()
   log("Entlade in wiederverwendbare Ender-Chest aus Slot "..UNLOAD_CHEST_SLOT..".")
@@ -2373,37 +2501,26 @@ refuelFromEnderChestFull = function()
     unloadToEnderChest()
   end
 
-  log("Tanke aus wiederverwendbarer Fuel-Ender-Chest aus Slot "..FUEL_CHEST_SLOT..".")
+  local fueled, primaryGainedFuel = tryRefuelFromReusableChest(FUEL_CHEST_SLOT, "Fuel-Ender-Chest")
 
-  local chestName = placeReusableChest(FUEL_CHEST_SLOT, "Fuel-Ender-Chest")
+  if not fueled then
+    log("Fuel-Ender-Chest in Slot "..FUEL_CHEST_SLOT.." liefert nach "..FUEL_CHEST_EMPTY_RETRIES.." Versuchen nicht genug Fuel. Teste andere Ender-Chest in Slot "..UNLOAD_CHEST_SLOT..".")
+    minerAlert = "try_other_fuel_chest"
+    sendStatus("try_other_fuel_chest", false)
 
-  while fuel() < fuelLimit() do
-    local before = fuel()
+    local alternateFueled = tryRefuelFromReusableChest(UNLOAD_CHEST_SLOT, "Alternative-Fuel-Ender-Chest")
 
-    for i=1,WORK_SLOT_LAST do
-      turtle.select(i)
-
-      while fuel() < fuelLimit() do
-        local got = turtle.suck(64)
-        if not got then break end
-
-        if not turtle.refuel() then
-          turtle.drop()
-          break
-        end
+    if alternateFueled then
+      if not primaryGainedFuel then
+        swapReservedChestSlots()
       end
-    end
-
-    if fuel() == before then
-      log("Fuel-Ender-Chest liefert gerade keinen Fuel. Warte.")
-      minerAlert = "fuel_wait"
-      sendStatus("fuel_wait", false)
-      pollAdminCommands(COMMAND_WAIT)
-      sleep(10)
+    else
+      minerAlert = "wrong_fuel_chest"
+      sendStatus("wrong_fuel_chest", false)
+      stop("Keine Ender-Chest liefert genug Fuel nach je "..FUEL_CHEST_EMPTY_RETRIES.." Versuchen. Pruefe Slot "..FUEL_CHEST_SLOT.." und Slot "..UNLOAD_CHEST_SLOT..".")
     end
   end
 
-  recoverReusableChest(FUEL_CHEST_SLOT, "Fuel-Ender-Chest", chestName)
   minerAlert = nil
   log("Turtle-Fuel voll: "..fuel().." / "..fuelLimit())
 end
