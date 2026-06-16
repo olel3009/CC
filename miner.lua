@@ -635,6 +635,69 @@ local function headingName(h)
   return tostring(h)
 end
 
+local function gpsHeadingCalibration(context, required)
+  local sx, sy, sz = locateGps(required)
+
+  if not sx then
+    log("GPS-Ausrichtung nicht moeglich ("..tostring(context)..").")
+    return false
+  end
+
+  for turns=0,3 do
+    if turtle.forward() then
+      local nx, ny, nz = locateGps(required)
+
+      if not nx then
+        turtle.back()
+        return false
+      end
+
+      local moveHeading = headingFromDelta(nx - sx, nz - sz)
+
+      local returned = false
+
+      for _=1,8 do
+        if turtle.back() then
+          returned = true
+          break
+        end
+
+        sleep(0.2)
+      end
+
+      if not returned then
+        error("GPS-Ausrichtung: Probe-Schritt konnte nicht zurueckfahren.")
+      end
+
+      local rx, ry, rz = locateGps(false)
+      if rx then
+        x, y, z = rx, ry, rz
+      else
+        x, y, z = sx, sy, sz
+      end
+
+      if moveHeading ~= nil then
+        local originalHeading = (moveHeading - turns) % 4
+
+        for _=1,turns do
+          turtle.turnLeft()
+        end
+
+        heading = originalHeading
+        log("GPS-Ausrichtung "..tostring(context)..": heading="..headingName(heading)..".")
+
+        if save then save() end
+        return true
+      end
+    end
+
+    turtle.turnRight()
+  end
+
+  log("GPS-Ausrichtung nicht moeglich ("..tostring(context).."): keine freie Probe-Richtung.")
+  return false
+end
+
 local function setupScan(radius)
   local ok, result, err
 
@@ -983,6 +1046,7 @@ local function setup()
 
   heading = autoDetectStartHeading() or CONFIG_HEADING
   print("Startausrichtung: "..headingName(heading).." ("..heading..")")
+  gpsHeadingCalibration("Setup", false)
   normalLowestY = CONFIG_LOWEST_Y
 
   local setupBlocks, setupErr = setupScan(MIN_SCAN_RADIUS)
@@ -1035,6 +1099,7 @@ if fs.exists(STATE) then
     adminId=s.adminId
     adminStartReceived = s.adminStartReceived ~= false
     log("Resume gefunden.")
+    gpsHeadingCalibration("Resume", false)
   else
     fs.delete(STATE)
     setup()
