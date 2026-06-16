@@ -291,6 +291,8 @@ function openWirelessModem()
     return true
   end
 
+  ensureModemAvailable()
+
   if not equipEnderModem() then
     return false
   end
@@ -498,6 +500,41 @@ function recoverModemSlot()
   return false
 end
 
+function ensureModemAvailable()
+  if findWirelessModemSide() then
+    return true, "equipped_modem"
+  end
+
+  recoverModemSlot()
+
+  local modemItem = turtle.getItemDetail(MODEM_SLOT)
+  if modemItem and isModemItemName(modemItem.name) then
+    return true, modemItem.name
+  end
+
+  for i=1,16 do
+    local item = turtle.getItemDetail(i)
+
+    if item and isModemItemName(item.name) then
+      moveMatchingItemToSlot(isModemItemName, MODEM_SLOT, "Ender/Wireless Modem")
+      modemItem = turtle.getItemDetail(MODEM_SLOT)
+
+      if modemItem and isModemItemName(modemItem.name) then
+        return true, modemItem.name
+      end
+    end
+  end
+
+  forceUnequipWirelessModem()
+
+  modemItem = turtle.getItemDetail(MODEM_SLOT)
+  if modemItem and isModemItemName(modemItem.name) then
+    return true, modemItem.name
+  end
+
+  return false, nil
+end
+
 function turnRightRaw()
   turtle.turnRight()
   heading = (heading + 1) % 4
@@ -617,7 +654,7 @@ function locateGps(required)
   local equippedForGps = false
 
   if not findWirelessModemSide() then
-    if not equipEnderModem() then
+    if not ensureModemAvailable() or not equipEnderModem() then
       if required then error("GPS braucht das Ender-Modem-Modul in Slot "..MODEM_SLOT..".") end
       return nil
     end
@@ -1519,6 +1556,30 @@ function nearestPointInMineArea(tx, tz)
   return tx, tz
 end
 
+function reservedChestsReady()
+  recoverAdjacentEnderChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")
+  recoverAdjacentEnderChest(FUEL_CHEST_SLOT, "Fuel-Ender-Chest")
+
+  local unloadItem = turtle.getItemDetail(UNLOAD_CHEST_SLOT)
+  local fuelItem = turtle.getItemDetail(FUEL_CHEST_SLOT)
+
+  if not unloadItem or not isReservedEnderChestItemName(unloadItem.name) then
+    return false, UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest"
+  end
+
+  if not fuelItem or not isReservedEnderChestItemName(fuelItem.name) then
+    return false, FUEL_CHEST_SLOT, "Fuel-Ender-Chest"
+  end
+
+  return true
+end
+
+function commandNeedsReservedChests(action)
+  if action == "set_recovery" or action == "recovery" or action == "recover" then return false end
+  if action == "miner_status" then return false end
+  return true
+end
+
 function applyAdminCommand(sender, cmd)
   if type(cmd) == "string" then
     cmd = { command=cmd }
@@ -1564,6 +1625,23 @@ function applyAdminCommand(sender, cmd)
 
     sendStatus("command_ack", false)
     return true
+  end
+
+  if commandNeedsReservedChests(action) then
+    local ready, missingSlot, missingLabel = reservedChestsReady()
+
+    if not ready then
+      minerState = "recovery"
+      minerAlert = "missing_reserved_chest"
+      sendStatus("missing_reserved_chest", false)
+      log("Admin-Befehl "..tostring(action).." abgelehnt: "..missingLabel.." fehlt in Slot "..missingSlot..". Fahre Recovery statt Mining-Bereich anzunehmen.")
+
+      if goToRecoveryIfConfigured then
+        goToRecoveryIfConfigured(missingLabel, missingSlot)
+      end
+
+      return true
+    end
   end
 
   if ax1 and ax2 and az1 and az2 then
@@ -2332,18 +2410,25 @@ end
 
 function requireReservedChest(slot, label)
   if slot == MODEM_SLOT then
-    recoverModemSlot()
+    local ok, modemName = ensureModemAvailable()
 
-    local modemItem = turtle.getItemDetail(slot)
-    if modemItem and isModemItemName(modemItem.name) then
-      return modemItem.name
-    end
-
-    if findWirelessModemSide() then
-      return "equipped_modem"
+    if ok then
+      return modemName
     end
 
     stop(label.." fehlt in Slot "..slot.." oder ist nicht ausgeruestet.")
+  end
+
+  if slot == UNLOAD_CHEST_SLOT or slot == FUEL_CHEST_SLOT then
+    local ready, missingSlot, missingLabel = reservedChestsReady()
+
+    if not ready then
+      if goToRecoveryIfConfigured then
+        goToRecoveryIfConfigured(missingLabel, missingSlot)
+      end
+
+      stop(missingLabel.." fehlt in Slot "..missingSlot.." oder ist keine Ender-Chest.")
+    end
   end
 
   local item = turtle.getItemDetail(slot)
