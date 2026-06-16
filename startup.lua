@@ -10,9 +10,27 @@ local BACKUP_FILE = "miner.lua.old"
 local MIN_STARTUP_SIZE = 1000
 local MIN_MINER_SIZE = 20000
 local ADMIN_PROTOCOL = "miner_admin"
+local STARTUP_DEBUG_LOG = "startup_debug.log"
 
 local function log(msg)
   print("[Startup] "..msg)
+end
+
+local function debugLog(msg)
+  local text = tostring(msg)
+  print("[Startup] "..text)
+
+  pcall(function()
+    if fs.exists(STARTUP_DEBUG_LOG) and fs.getSize(STARTUP_DEBUG_LOG) > 30000 then
+      fs.delete(STARTUP_DEBUG_LOG)
+    end
+
+    local f = fs.open(STARTUP_DEBUG_LOG, "a")
+    if f then
+      f.writeLine(tostring(os.epoch("utc")).." "..text)
+      f.close()
+    end
+  end)
 end
 
 local function computerId()
@@ -203,8 +221,8 @@ end
 local function updateMiner()
   local url = minerDownloadUrl()
 
-  log("Lade Miner von GitHub main.")
-  log(url)
+  debugLog("Lade Miner von GitHub main.")
+  debugLog(url)
   sleep(10)
 
   if fs.exists(UPDATE_FILE) then
@@ -231,11 +249,11 @@ local function updateMiner()
     end
 
     fs.move(UPDATE_FILE, MINER_FILE)
-    log("Miner aktualisiert.")
+    debugLog("Miner aktualisiert.")
     return true
   end
 
-  log("Update fehlgeschlagen. Nutze vorhandenen Miner.")
+  debugLog("Update fehlgeschlagen. Nutze vorhandenen Miner.")
   return validateMiner(MINER_FILE)
 end
 
@@ -250,6 +268,8 @@ local function runMiner()
 end
 
 while true do
+  debugLog("Startup boot")
+
   if updateStartup() then
     sleep(2)
     os.reboot()
@@ -259,16 +279,20 @@ while true do
     local ok, err = runMiner()
 
     if not ok then
-      log("Miner crash: "..tostring(err))
+      debugLog("Miner crash: "..tostring(err))
       sendStartupStatus("crashed", "crashed", err)
-      log("Miner-State bleibt erhalten fuer Recovery/Resume.")
+      debugLog("Miner-State bleibt erhalten fuer Recovery/Resume.")
+      debugLog("Crash-Hold aktiv. Kein Auto-Reboot, kein neuer Download.")
+      while true do
+        sleep(60)
+      end
     else
-      log("Miner beendet oder abgestuerzt ohne Lua-Fehler.")
+      debugLog("Miner beendet oder abgestuerzt ohne Lua-Fehler.")
       sendStartupStatus("stopped", "stopped", "Miner beendet ohne pcall-Fehler.")
-      log("Miner-State bleibt erhalten fuer Recovery/Resume.")
+      debugLog("Miner-State bleibt erhalten fuer Recovery/Resume.")
     end
   else
-    log("Kein Miner vorhanden. Warte.")
+    debugLog("Kein Miner vorhanden. Warte.")
     sendStartupStatus("startup_error", "startup_error", "Kein gueltiger Miner vorhanden.")
   end
 

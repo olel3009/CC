@@ -1748,6 +1748,8 @@ function applyAdminCommand(sender, cmd)
         local recoveryOk, recoveryErr = pcall(goToRecoveryIfConfigured, missingLabel, missingSlot)
         if not recoveryOk then
           debugLog("REC direct fail: "..tostring(recoveryErr))
+        elseif recoveryErr == false then
+          debugLog("REC direct false: "..tostring(missingLabel).." s"..tostring(missingSlot))
         end
       end
 
@@ -2538,6 +2540,8 @@ function requireReservedChest(slot, label)
         local recoveryOk, recoveryErr = pcall(goToRecoveryIfConfigured, missingLabel, missingSlot)
         if not recoveryOk then
           debugLog("REC direct fail: "..tostring(recoveryErr))
+        elseif recoveryErr == false then
+          debugLog("REC direct false: "..tostring(missingLabel).." s"..tostring(missingSlot))
         end
       end
 
@@ -2563,6 +2567,8 @@ function requireReservedChest(slot, label)
       local recoveryOk, recoveryErr = pcall(goToRecoveryIfConfigured, label, slot)
       if not recoveryOk then
         debugLog("REC direct fail: "..tostring(recoveryErr))
+      elseif recoveryErr == false then
+        debugLog("REC direct false: "..tostring(label).." s"..tostring(slot))
       end
     end
 
@@ -3065,7 +3071,7 @@ goToRecoveryIfConfigured = function(reason, missingSlot)
   local tx, ty, tz, dx, dz = recoveryTargetForMiner()
 
   if not tx then
-    log("Keine Recovery-Koordinaten gesetzt; kann fehlende Chest nicht automatisch ersetzen.")
+    debugLog("REC no coords rx="..tostring(recoveryX).." ry="..tostring(recoveryY).." rz="..tostring(recoveryZ).." state="..tostring(fs.exists(STATE)))
     return false
   end
 
@@ -3642,6 +3648,7 @@ function main()
   miningLoop()
 end
 
+debugLog("BOOT miner.lua state="..tostring(STATE).." debug="..tostring(DEBUG_LOG))
 ok, err = pcall(main)
 
 if not ok then
