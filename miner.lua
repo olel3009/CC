@@ -7,6 +7,7 @@
 -- Turtle schaut beim Start zur Fuel-Kiste.
 
 STATE = "miner_state"
+DEBUG_LOG = "miner_debug.log"
 STATE_VERSION = 19
 STARTUP_FILE = "startup.lua"
 STARTUP_UPDATE_FILE = "startup.lua.new"
@@ -177,6 +178,23 @@ math.randomseed(os.epoch("utc"))
 
 function log(msg)
   print("[Miner] "..msg)
+end
+
+function debugLog(msg)
+  local text = tostring(msg)
+  print("[Miner] "..text)
+
+  pcall(function()
+    if fs.exists(DEBUG_LOG) and fs.getSize(DEBUG_LOG) > 30000 then
+      fs.delete(DEBUG_LOG)
+    end
+
+    local f = fs.open(DEBUG_LOG, "a")
+    if f then
+      f.writeLine(tostring(os.epoch("utc")).." "..text)
+      f.close()
+    end
+  end)
 end
 
 function writeTable(path, data)
@@ -1206,12 +1224,13 @@ stop = function(msg)
     end
 
     if not ok then
-      print("REC fail pcall: "..tostring(recovered))
+      debugLog("REC fail pcall: "..tostring(recovered))
     else
-      print("REC fail returned false")
+      debugLog("REC fail returned false")
     end
   end
 
+  debugLog("STOP error: "..tostring(msg))
   error(msg)
 end
 
@@ -1723,12 +1742,12 @@ function applyAdminCommand(sender, cmd)
       minerState = "recovery"
       minerAlert = "missing_reserved_chest"
       sendStatus("missing_reserved_chest", false)
-      log("REC chest fehlt: "..tostring(missingLabel).." s"..tostring(missingSlot).." cmd="..tostring(action))
+      debugLog("REC chest fehlt: "..tostring(missingLabel).." s"..tostring(missingSlot).." cmd="..tostring(action))
 
       if goToRecoveryIfConfigured then
         local recoveryOk, recoveryErr = pcall(goToRecoveryIfConfigured, missingLabel, missingSlot)
         if not recoveryOk then
-          log("REC direct fail: "..tostring(recoveryErr))
+          debugLog("REC direct fail: "..tostring(recoveryErr))
         end
       end
 
@@ -2518,7 +2537,7 @@ function requireReservedChest(slot, label)
       if goToRecoveryIfConfigured then
         local recoveryOk, recoveryErr = pcall(goToRecoveryIfConfigured, missingLabel, missingSlot)
         if not recoveryOk then
-          log("REC direct fail: "..tostring(recoveryErr))
+          debugLog("REC direct fail: "..tostring(recoveryErr))
         end
       end
 
@@ -2543,7 +2562,7 @@ function requireReservedChest(slot, label)
     if goToRecoveryIfConfigured then
       local recoveryOk, recoveryErr = pcall(goToRecoveryIfConfigured, label, slot)
       if not recoveryOk then
-        log("REC direct fail: "..tostring(recoveryErr))
+        debugLog("REC direct fail: "..tostring(recoveryErr))
       end
     end
 
@@ -2895,12 +2914,12 @@ function goHorizontal(tx, tz, allowOutside, allowAboveTarget)
         while x < target do
           local remaining = target - x
           if recoveryTravelMode then
-            log("REC E r="..tostring(remaining).." p="..tostring(x)..","..tostring(y)..","..tostring(z).." f="..tostring(fuel()))
+            debugLog("REC E r="..tostring(remaining).." p="..tostring(x)..","..tostring(y)..","..tostring(z).." f="..tostring(fuel()))
             sleep(0.2)
           end
           if not travelStep(remaining) then return false, "Weg nach Osten blockiert." end
           if recoveryTravelMode then
-            log("REC E ok p="..tostring(x)..","..tostring(y)..","..tostring(z))
+            debugLog("REC E ok p="..tostring(x)..","..tostring(y)..","..tostring(z))
             sleep(0.2)
           end
           clean()
@@ -2910,12 +2929,12 @@ function goHorizontal(tx, tz, allowOutside, allowAboveTarget)
         while x > target do
           local remaining = x - target
           if recoveryTravelMode then
-            log("REC W r="..tostring(remaining).." p="..tostring(x)..","..tostring(y)..","..tostring(z).." f="..tostring(fuel()))
+            debugLog("REC W r="..tostring(remaining).." p="..tostring(x)..","..tostring(y)..","..tostring(z).." f="..tostring(fuel()))
             sleep(0.2)
           end
           if not travelStep(remaining) then return false, "Weg nach Westen blockiert." end
           if recoveryTravelMode then
-            log("REC W ok p="..tostring(x)..","..tostring(y)..","..tostring(z))
+            debugLog("REC W ok p="..tostring(x)..","..tostring(y)..","..tostring(z))
             sleep(0.2)
           end
           clean()
@@ -2927,12 +2946,12 @@ function goHorizontal(tx, tz, allowOutside, allowAboveTarget)
         while z < target do
           local remaining = target - z
           if recoveryTravelMode then
-            log("REC S r="..tostring(remaining).." p="..tostring(x)..","..tostring(y)..","..tostring(z).." f="..tostring(fuel()))
+            debugLog("REC S r="..tostring(remaining).." p="..tostring(x)..","..tostring(y)..","..tostring(z).." f="..tostring(fuel()))
             sleep(0.2)
           end
           if not travelStep(remaining) then return false, "Weg nach Sueden blockiert." end
           if recoveryTravelMode then
-            log("REC S ok p="..tostring(x)..","..tostring(y)..","..tostring(z))
+            debugLog("REC S ok p="..tostring(x)..","..tostring(y)..","..tostring(z))
             sleep(0.2)
           end
           clean()
@@ -2942,12 +2961,12 @@ function goHorizontal(tx, tz, allowOutside, allowAboveTarget)
         while z > target do
           local remaining = z - target
           if recoveryTravelMode then
-            log("REC N r="..tostring(remaining).." p="..tostring(x)..","..tostring(y)..","..tostring(z).." f="..tostring(fuel()))
+            debugLog("REC N r="..tostring(remaining).." p="..tostring(x)..","..tostring(y)..","..tostring(z).." f="..tostring(fuel()))
             sleep(0.2)
           end
           if not travelStep(remaining) then return false, "Weg nach Norden blockiert." end
           if recoveryTravelMode then
-            log("REC N ok p="..tostring(x)..","..tostring(y)..","..tostring(z))
+            debugLog("REC N ok p="..tostring(x)..","..tostring(y)..","..tostring(z))
             sleep(0.2)
           end
           clean()
@@ -3057,11 +3076,11 @@ goToRecoveryIfConfigured = function(reason, missingSlot)
   minerAlert = "recovery_missing_chest"
   sendStatus("recovery_missing_chest", false)
   local function recoveryLog(msg)
-    log("REC "..tostring(msg).." p="..tostring(x)..","..tostring(y)..","..tostring(z).." h="..tostring(heading).." f="..tostring(fuel()))
+    debugLog("REC "..tostring(msg).." p="..tostring(x)..","..tostring(y)..","..tostring(z).." h="..tostring(heading).." f="..tostring(fuel()))
   end
 
   recoveryLog("start slot="..tostring(missingSlot).." ziel="..tostring(tx)..","..tostring(ty)..","..tostring(tz).." off="..tostring(dx)..","..tostring(dz).." grund="..tostring(reason))
-  log("REC wait "..tostring(delay).."s")
+  debugLog("REC wait "..tostring(delay).."s")
   sleep(delay)
 
   recoveryTravelMode = true
@@ -3107,17 +3126,17 @@ end
 
 fatalRecoveryHandler = function(reason, missingSlot)
   if inFatalRecovery then
-    log("REC fatal skip nested")
+    debugLog("REC fatal skip nested")
     return false
   end
 
   if not goToRecoveryIfConfigured then
-    log("REC fatal no handler")
+    debugLog("REC fatal no handler")
     return false
   end
 
   inFatalRecovery = true
-  log("REC fatal start: "..tostring(reason))
+  debugLog("REC fatal start: "..tostring(reason))
   local ok, recovered = pcall(goToRecoveryIfConfigured, reason, missingSlot)
 
   if ok and recovered ~= false then
@@ -3128,9 +3147,9 @@ fatalRecoveryHandler = function(reason, missingSlot)
   inFatalRecovery = false
 
   if not ok then
-    log("REC fatal fail: "..tostring(recovered))
+    debugLog("REC fatal fail: "..tostring(recovered))
   else
-    log("REC fatal false")
+    debugLog("REC fatal false")
   end
 
   return false
@@ -3582,13 +3601,14 @@ function miningLoop()
     local ok, err = pcall(miningLoopStep)
 
     if not ok then
-      log("ERR mining: "..tostring(err))
+      debugLog("ERR mining: "..tostring(err))
 
       if not isRecoverableMiningError(err) then
         if fatalRecoveryHandler and fatalRecoveryHandler("Mining-Crash: "..tostring(err), nil) then
           return
         end
 
+        debugLog("Mining fatal throw: "..tostring(err))
         error(err)
       end
 
@@ -3629,5 +3649,6 @@ if not ok then
     return
   end
 
+  debugLog("Main fatal throw: "..tostring(err))
   error(err)
 end
