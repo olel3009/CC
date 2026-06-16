@@ -4,13 +4,13 @@
 -- Erwartung:
 -- - Vorne ist Platz fuer die neue Turtle.
 -- - Rechts ist Platz, damit der Builder nach jeder Drone eine Position weitergehen kann.
+-- - Slot 1: Ender-Chest mit Pickaxe-Upgrades.
+-- - Slot 2: Ender-Chest mit Cobblestone/Dummy-Items.
 -- - Das Builder-Inventar enthaelt pro Drone:
 --   * 1 Turtle
 --   * 1 Geo/Ore Scanner
---   * 1 Pickaxe Upgrade
 --   * 1 Wireless/Ender Modem
 --   * 2 Ender-Chests
---   * mindestens 14 gleiche, stapelbare Dummy-Items als Slot-Blocker
 --
 -- Ziel-Inventar der neuen Drone:
 -- - Slot 15: Entlade-Ender-Chest
@@ -18,6 +18,8 @@
 -- - Scanner/Pickaxe/Modem landen in freien Slots; miner.lua sortiert/equipped sie beim Start.
 
 local BLOCKER_COUNT = 14
+local PICKAXE_SOURCE_CHEST_SLOT = 1
+local BLOCKER_SOURCE_CHEST_SLOT = 2
 local args = { ... }
 
 local function log(msg)
@@ -81,9 +83,13 @@ local function isSpecialItem(detail)
     or isEnderStorageItem(detail)
 end
 
+local function isSourceChestSlot(slot)
+  return slot == PICKAXE_SOURCE_CHEST_SLOT or slot == BLOCKER_SOURCE_CHEST_SLOT
+end
+
 local function findSlot(testFn, ignoreSlot)
   for slot=1,16 do
-    if slot ~= ignoreSlot then
+    if slot ~= ignoreSlot and not isSourceChestSlot(slot) then
       local detail = item(slot)
 
       if detail and testFn(detail, slot) then
@@ -97,7 +103,7 @@ end
 
 local function findEmptySlot(ignoreSlot)
   for slot=1,16 do
-    if slot ~= ignoreSlot and turtle.getItemCount(slot) == 0 then
+    if slot ~= ignoreSlot and not isSourceChestSlot(slot) and turtle.getItemCount(slot) == 0 then
       return slot
     end
   end
@@ -108,7 +114,7 @@ end
 local function findBlockerSlotFixed()
   for slot=1,16 do
     local detail = item(slot)
-    if detail and not isSpecialItem(detail) and turtle.getItemCount(slot) >= BLOCKER_COUNT then
+    if not isSourceChestSlot(slot) and detail and not isSpecialItem(detail) and turtle.getItemCount(slot) >= BLOCKER_COUNT then
       return slot, detail
     end
   end
@@ -122,7 +128,7 @@ local function findEnderChestSlots()
   for slot=1,16 do
     local detail = item(slot)
 
-    if detail and isEnderStorageItem(detail) then
+    if not isSourceChestSlot(slot) and detail and isEnderStorageItem(detail) then
       table.insert(slots, slot)
     end
   end
@@ -135,7 +141,7 @@ local function countEnderChests()
 
   for slot=1,16 do
     local detail = item(slot)
-    if detail and isEnderStorageItem(detail) then
+    if not isSourceChestSlot(slot) and detail and isEnderStorageItem(detail) then
       total = total + turtle.getItemCount(slot)
     end
   end
@@ -202,7 +208,7 @@ local function countBlockerItems()
   for slot=1,16 do
     local other = item(slot)
 
-    if other and not isSpecialItem(other) and other.name == detail.name then
+    if not isSourceChestSlot(slot) and other and not isSpecialItem(other) and other.name == detail.name then
       total = total + turtle.getItemCount(slot)
     end
   end
@@ -212,6 +218,8 @@ end
 
 local function printInventorySummary()
   print("Erkannt:")
+  print("- Slot 1 Pickaxe-Chest: "..(isEnderStorageItem(item(PICKAXE_SOURCE_CHEST_SLOT)) and "ok" or "fehlt"))
+  print("- Slot 2 Cobble-Chest: "..(isEnderStorageItem(item(BLOCKER_SOURCE_CHEST_SLOT)) and "ok" or "fehlt"))
   print("- Turtles: "..(findSlot(isTurtleItem) and "1+" or "0"))
   print("- Scanner: "..(findSlot(isScannerItem) and "1+" or "0"))
   print("- Pickaxe: "..(findSlot(isPickaxeItem) and "1+" or "0"))
@@ -220,7 +228,94 @@ local function printInventorySummary()
   print("- Dummy-Items: "..countBlockerItems().." / "..BLOCKER_COUNT)
 end
 
+local function placeSourceChest(slot, label)
+  local detail = item(slot)
+
+  if not detail or not isEnderStorageItem(detail) then
+    error(label.." fehlt in Slot "..slot..".")
+  end
+
+  turtle.select(slot)
+
+  if not turtle.place() then
+    error(label.." konnte vorne nicht platziert werden. Ist der Platz frei?")
+  end
+end
+
+local function recoverSourceChest(slot, label)
+  turtle.select(slot)
+
+  if not turtle.dig() then
+    error(label.." konnte nach dem Nachfuellen nicht wieder abgebaut werden.")
+  end
+
+  if not item(slot) or not isEnderStorageItem(item(slot)) then
+    local found = findSlot(isEnderStorageItem)
+
+    if found then
+      turtle.select(found)
+      turtle.transferTo(slot)
+    end
+  end
+
+  if not item(slot) or not isEnderStorageItem(item(slot)) then
+    error(label.." konnte nicht in Slot "..slot.." zuruecksortiert werden.")
+  end
+end
+
+local function withSourceChest(slot, label, fn)
+  placeSourceChest(slot, label)
+  local ok, err = pcall(fn)
+  recoverSourceChest(slot, label)
+
+  if not ok then
+    error(err)
+  end
+end
+
+local function pullFromSource(slot, label, count, testFn)
+  withSourceChest(slot, label, function()
+    local targetSlot = findEmptySlot(slot)
+
+    if not targetSlot then
+      error("Kein freier Slot zum Nachfuellen aus "..label..".")
+    end
+
+    turtle.select(targetSlot)
+
+    if not turtle.suck(count) then
+      error(label.." liefert kein benoetigtes Item.")
+    end
+
+    local detail = item(targetSlot)
+
+    if not detail or not testFn(detail) then
+      if detail then turtle.drop(turtle.getItemCount(targetSlot)) end
+      error(label.." liefert das falsche Item.")
+    end
+
+    if turtle.getItemCount(targetSlot) < count then
+      turtle.drop(turtle.getItemCount(targetSlot))
+      error(label.." liefert zu wenig Items. Benoetigt: "..count..".")
+    end
+  end)
+end
+
+local function refillFromSourceChests()
+  if not findSlot(isPickaxeItem) then
+    pullFromSource(PICKAXE_SOURCE_CHEST_SLOT, "Pickaxe-Ender-Chest", 1, isPickaxeItem)
+  end
+
+  if not findBlockerSlotFixed() then
+    pullFromSource(BLOCKER_SOURCE_CHEST_SLOT, "Cobblestone-Ender-Chest", BLOCKER_COUNT, function(detail)
+      return not isSpecialItem(detail)
+    end)
+  end
+end
+
 local function ensureRequirements(droneIndex)
+  refillFromSourceChests()
+
   local missing = missingRequirements()
 
   if #missing > 0 then
