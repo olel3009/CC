@@ -1206,7 +1206,9 @@ stop = function(msg)
     end
 
     if not ok then
-      print("Recovery fehlgeschlagen: "..tostring(recovered))
+      print("REC fail pcall: "..tostring(recovered))
+    else
+      print("REC fail returned false")
     end
   end
 
@@ -1724,7 +1726,10 @@ function applyAdminCommand(sender, cmd)
       log("REC chest fehlt: "..tostring(missingLabel).." s"..tostring(missingSlot).." cmd="..tostring(action))
 
       if goToRecoveryIfConfigured then
-        goToRecoveryIfConfigured(missingLabel, missingSlot)
+        local recoveryOk, recoveryErr = pcall(goToRecoveryIfConfigured, missingLabel, missingSlot)
+        if not recoveryOk then
+          log("REC direct fail: "..tostring(recoveryErr))
+        end
       end
 
       return true
@@ -2511,7 +2516,10 @@ function requireReservedChest(slot, label)
 
     if not ready then
       if goToRecoveryIfConfigured then
-        goToRecoveryIfConfigured(missingLabel, missingSlot)
+        local recoveryOk, recoveryErr = pcall(goToRecoveryIfConfigured, missingLabel, missingSlot)
+        if not recoveryOk then
+          log("REC direct fail: "..tostring(recoveryErr))
+        end
       end
 
       stop(missingLabel.." fehlt in Slot "..missingSlot.." oder ist keine Ender-Chest.")
@@ -2533,7 +2541,10 @@ function requireReservedChest(slot, label)
     end
 
     if goToRecoveryIfConfigured then
-      goToRecoveryIfConfigured(label, slot)
+      local recoveryOk, recoveryErr = pcall(goToRecoveryIfConfigured, label, slot)
+      if not recoveryOk then
+        log("REC direct fail: "..tostring(recoveryErr))
+      end
     end
 
     stop(label.." fehlt in Slot "..slot.." oder ist keine Ender-Chest.")
@@ -3096,14 +3107,17 @@ end
 
 fatalRecoveryHandler = function(reason, missingSlot)
   if inFatalRecovery then
+    log("REC fatal skip nested")
     return false
   end
 
   if not goToRecoveryIfConfigured then
+    log("REC fatal no handler")
     return false
   end
 
   inFatalRecovery = true
+  log("REC fatal start: "..tostring(reason))
   local ok, recovered = pcall(goToRecoveryIfConfigured, reason, missingSlot)
 
   if ok and recovered ~= false then
@@ -3114,7 +3128,9 @@ fatalRecoveryHandler = function(reason, missingSlot)
   inFatalRecovery = false
 
   if not ok then
-    log("Fatal-Recovery fehlgeschlagen: "..tostring(recovered))
+    log("REC fatal fail: "..tostring(recovered))
+  else
+    log("REC fatal false")
   end
 
   return false
