@@ -227,6 +227,23 @@ local function simpleCommand(command, targetId)
   queueCommand({ command=command, targetId=targetId }, duration)
 end
 
+local function recoveryCommand(targetId, command)
+  local x = readNumber("Recovery-X")
+  local y = readNumber("Recovery-Y")
+  local z = readNumber("Recovery-Z")
+  local radius = readNumber("Warteplatz-Radius", 6)
+  local duration = readNumber("Sendedauer Sekunden", DEFAULT_DURATION)
+
+  queueCommand({
+    command=command,
+    targetId=targetId,
+    x=x,
+    y=y,
+    z=z,
+    radius=radius
+  }, duration)
+end
+
 local function menu()
   while true do
     print("")
@@ -240,6 +257,10 @@ local function menu()
     print("6) Start an alle")
     print("7) Ores an alle setzen")
     print("8) Ores an einen Miner setzen")
+    print("9) Recovery-Koordinaten an alle setzen")
+    print("10) Recovery jetzt an alle")
+    print("11) Recovery-Koordinaten an einen Miner setzen")
+    print("12) Recovery jetzt an einen Miner")
     print("q) Ende")
     write("> ")
 
@@ -263,6 +284,16 @@ local function menu()
     elseif choice == "8" then
       local id = readNumber("Miner Computer-ID")
       oreCommand(id)
+    elseif choice == "9" then
+      recoveryCommand("all", "set_recovery")
+    elseif choice == "10" then
+      recoveryCommand("all", "recover")
+    elseif choice == "11" then
+      local id = readNumber("Miner Computer-ID")
+      recoveryCommand(id, "set_recovery")
+    elseif choice == "12" then
+      local id = readNumber("Miner Computer-ID")
+      recoveryCommand(id, "recover")
     elseif choice == "q" or choice == "Q" then
       return
     end

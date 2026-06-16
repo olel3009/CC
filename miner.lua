@@ -142,6 +142,9 @@ local normalLowestY = CONFIG_LOWEST_Y
 local miningMode = "normal"
 local wantedOres = nil
 local wantedOrePatterns = nil
+local recoveryX, recoveryY, recoveryZ = nil, nil, nil
+local recoveryRadius = 6
+local recoveryTravelMode = false
 
 local oreMinedCount = 0
 local minedSinceStatus = {}
@@ -158,6 +161,9 @@ local minerState = "boot"
 local minerAlert = nil
 local lastCommand = nil
 local lastCommandSeq = nil
+local goToRecoveryIfConfigured = nil
+local fatalRecoveryHandler = nil
+local inFatalRecovery = false
 
 local scanner = peripheral.find("geoScanner") or peripheral.find("geo_scanner")
 
@@ -599,6 +605,7 @@ local function repairStartupEquipment()
 
   recoverAdjacentEnderChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")
   recoverAdjacentEnderChest(FUEL_CHEST_SLOT, "Fuel-Ender-Chest")
+  recoverFrontEnderChest(FUEL_CHEST_SLOT, "Start-Front-Ender-Chest")
 end
 
 local function locateGps(required)
@@ -1040,6 +1047,10 @@ save = function()
     miningMode=miningMode,
     wantedOres=wantedOres,
     wantedOrePatterns=wantedOrePatterns,
+    recoveryX=recoveryX,
+    recoveryY=recoveryY,
+    recoveryZ=recoveryZ,
+    recoveryRadius=recoveryRadius,
     adminId=adminId,
     adminStartReceived=adminStartReceived
   })
@@ -1048,7 +1059,7 @@ end
 stop = function(msg)
   save()
   print("")
-  print("========== STOP ==========")
+  print("====== STOP / RECOVERY ======")
   print(msg)
   print("Position: x="..x.." y="..y.." z="..z.." heading="..heading)
   print("Home: x="..tostring(homeX).." z="..tostring(homeZ))
@@ -1061,7 +1072,20 @@ stop = function(msg)
   print("Mining-Modus: "..tostring(miningMode))
   print("Turtle-Fuel: "..fuel().." / "..fuelLimit())
   print("Ores abgebaut: "..oreMinedCount)
-  print("==========================")
+  print("=============================")
+
+  if fatalRecoveryHandler and not inFatalRecovery then
+    local ok, recovered = pcall(fatalRecoveryHandler, "Stop: "..tostring(msg), nil)
+
+    if ok and recovered then
+      return
+    end
+
+    if not ok then
+      print("Recovery fehlgeschlagen: "..tostring(recovered))
+    end
+  end
+
   error(msg)
 end
 
@@ -1141,6 +1165,10 @@ if fs.exists(STATE) then
     miningMode=s.miningMode or "normal"
     wantedOres=s.wantedOres
     wantedOrePatterns=s.wantedOrePatterns
+    recoveryX=s.recoveryX
+    recoveryY=s.recoveryY
+    recoveryZ=s.recoveryZ
+    recoveryRadius=s.recoveryRadius or recoveryRadius
     adminId=s.adminId
     adminStartReceived = s.adminStartReceived ~= false
     log("Resume gefunden.")
@@ -1248,6 +1276,10 @@ local function statusPayload(kind)
     miningMode=miningMode,
     wantedOres=wantedOres,
     wantedOrePatterns=wantedOrePatterns,
+    recoveryX=recoveryX,
+    recoveryY=recoveryY,
+    recoveryZ=recoveryZ,
+    recoveryRadius=recoveryRadius,
     normalLowestY=normalLowestY,
     targetY=targetY,
     minedLastMinute=mined,
@@ -1509,10 +1541,28 @@ local function applyAdminCommand(sender, cmd)
   local tx = tonumber(commandValue(cmd, "x"))
   local ty = tonumber(commandValue(cmd, "y"))
   local tz = tonumber(commandValue(cmd, "z"))
+  local rr = tonumber(commandValue(cmd, "radius") or commandValue(cmd, "spread"))
   local ax1 = areaValue(cmd, "x1", "minX", "fromX")
   local ax2 = areaValue(cmd, "x2", "maxX", "toX")
   local az1 = areaValue(cmd, "z1", "minZ", "fromZ")
   local az2 = areaValue(cmd, "z2", "maxZ", "toZ")
+
+  if action == "set_recovery" or action == "recovery" or action == "recover" then
+    if tx then recoveryX = math.floor(tx + 0.5) end
+    if ty then recoveryY = math.floor(ty + 0.5) end
+    if tz then recoveryZ = math.floor(tz + 0.5) end
+    if rr then recoveryRadius = math.max(1, math.floor(rr + 0.5)) end
+
+    save()
+    log("Recovery-Koordinaten gesetzt: x="..tostring(recoveryX).." y="..tostring(recoveryY).." z="..tostring(recoveryZ).." radius="..tostring(recoveryRadius))
+
+    if action == "recover" and goToRecoveryIfConfigured then
+      goToRecoveryIfConfigured("Admin-Recovery", nil)
+    end
+
+    sendStatus("command_ack", false)
+    return true
+  end
 
   if ax1 and ax2 and az1 and az2 then
     setMineArea(math.floor(ax1 + 0.5), math.floor(az1 + 0.5), math.floor(ax2 + 0.5), math.floor(az2 + 0.5))
@@ -1739,6 +1789,8 @@ function distanceFromMineArea(tx, tz)
 end
 
 function forwardStaysInMineArea()
+  if recoveryTravelMode then return true end
+
   local nx, nz = forwardPosition()
 
   if inMineArea(x, z) then
@@ -2313,6 +2365,10 @@ local function requireReservedChest(slot, label)
       log(label.." Slot "..slot.." ist leer.")
     end
 
+    if goToRecoveryIfConfigured then
+      goToRecoveryIfConfigured(label, slot)
+    end
+
     stop(label.." fehlt in Slot "..slot.." oder ist keine Ender-Chest.")
   end
 
@@ -2633,8 +2689,8 @@ local function nearestOre()
   return best
 end
 
-local function goHorizontal(tx, tz)
-  if y > targetY then
+local function goHorizontal(tx, tz, allowOutside, allowAboveTarget)
+  if y > targetY and not allowAboveTarget then
     log("Seitliche Bewegung ueber Ziel-Y verhindert. Fahre zuerst runter zu Ziel-Y.")
 
     if not descendToTargetWithSidestep() then
@@ -2642,22 +2698,32 @@ local function goHorizontal(tx, tz)
     end
   end
 
-  tx, tz = nearestPointInMineArea(tx, tz)
+  if not allowOutside then
+    tx, tz = nearestPointInMineArea(tx, tz)
+  end
 
   local function travelAxis(target, isX)
+    local function travelStep(remaining)
+      if allowAboveTarget then
+        return rawForward(true, true)
+      end
+
+      return forwardTravel(remaining)
+    end
+
     if isX then
       if x < target then
         face(1)
         while x < target do
           local remaining = target - x
-          if not forwardTravel(remaining) then return false, "Weg nach Osten blockiert." end
+          if not travelStep(remaining) then return false, "Weg nach Osten blockiert." end
           clean()
         end
       elseif x > target then
         face(3)
         while x > target do
           local remaining = x - target
-          if not forwardTravel(remaining) then return false, "Weg nach Westen blockiert." end
+          if not travelStep(remaining) then return false, "Weg nach Westen blockiert." end
           clean()
         end
       end
@@ -2666,14 +2732,14 @@ local function goHorizontal(tx, tz)
         face(2)
         while z < target do
           local remaining = target - z
-          if not forwardTravel(remaining) then return false, "Weg nach Sueden blockiert." end
+          if not travelStep(remaining) then return false, "Weg nach Sueden blockiert." end
           clean()
         end
       elseif z > target then
         face(0)
         while z > target do
           local remaining = z - target
-          if not forwardTravel(remaining) then return false, "Weg nach Norden blockiert." end
+          if not travelStep(remaining) then return false, "Weg nach Norden blockiert." end
           clean()
         end
       end
@@ -2716,7 +2782,7 @@ local function goHorizontal(tx, tz)
     if not ok then stop(err or "Horizontaler Weg blockiert.") end
   end
 
-  if not inMineArea(x, z) then
+  if not allowOutside and not inMineArea(x, z) then
     local safeX, safeZ = nearestPointInMineArea(x, z)
 
     if x ~= safeX or z ~= safeZ then
@@ -2748,6 +2814,92 @@ local function goTo(tx, ty, tz)
   end
 
   log("Ziel erreicht: x="..x.." y="..y.." z="..z)
+end
+
+local function recoveryTargetForMiner()
+  if not recoveryX or not recoveryY or not recoveryZ then
+    return nil
+  end
+
+  local radius = math.max(1, tonumber(recoveryRadius) or 6)
+  local side = radius * 2 + 1
+  local capacity = side * side
+  local id = computerId() or os.getComputerID and os.getComputerID() or 0
+  local index = id % capacity
+  local dx = (index % side) - radius
+  local dz = (math.floor(index / side) % side) - radius
+
+  return recoveryX + dx, recoveryY, recoveryZ + dz, dx, dz
+end
+
+goToRecoveryIfConfigured = function(reason, missingSlot)
+  local tx, ty, tz, dx, dz = recoveryTargetForMiner()
+
+  if not tx then
+    log("Keine Recovery-Koordinaten gesetzt; kann fehlende Chest nicht automatisch ersetzen.")
+    return false
+  end
+
+  local id = computerId() or 0
+  local delay = (id % 20) * 0.5
+
+  minerState = "recovery"
+  minerAlert = "recovery_missing_chest"
+  sendStatus("recovery_missing_chest", false)
+  log("Recovery wegen "..tostring(reason)..". Fehlender Slot="..tostring(missingSlot)..". Warte "..delay.."s, Zielslot Offset dx="..dx.." dz="..dz..".")
+  sleep(delay)
+
+  recoveryTravelMode = true
+
+  while y < ty do
+    up()
+    clean()
+  end
+
+  while y > ty do
+    down()
+    clean()
+  end
+
+  goHorizontal(tx, tz, true, true)
+  recoveryTravelMode = false
+
+  save()
+  log("Recovery-Punkt erreicht wegen fehlender Chest: "..tostring(reason).." Slot "..tostring(missingSlot)..". Ziel x="..tx.." y="..ty.." z="..tz)
+
+  while true do
+    minerState = "recovery_wait"
+    minerAlert = "recovery_arrived"
+    sendStatus("recovery_arrived", false)
+    pollAdminCommands(COMMAND_WAIT)
+    sleep(30)
+  end
+end
+
+fatalRecoveryHandler = function(reason, missingSlot)
+  if inFatalRecovery then
+    return false
+  end
+
+  if not goToRecoveryIfConfigured then
+    return false
+  end
+
+  inFatalRecovery = true
+  local ok, recovered = pcall(goToRecoveryIfConfigured, reason, missingSlot)
+
+  if ok and recovered ~= false then
+    return true
+  end
+
+  recoveryTravelMode = false
+  inFatalRecovery = false
+
+  if not ok then
+    log("Fatal-Recovery fehlgeschlagen: "..tostring(recovered))
+  end
+
+  return false
 end
 
 local unload
@@ -3197,6 +3349,10 @@ local function miningLoop()
 
     if not ok then
       if not isRecoverableMiningError(err) then
+        if fatalRecoveryHandler and fatalRecoveryHandler("Mining-Crash: "..tostring(err), nil) then
+          return
+        end
+
         error(err)
       end
 
@@ -3222,4 +3378,12 @@ local function main()
   miningLoop()
 end
 
-main()
+local ok, err = pcall(main)
+
+if not ok then
+  if fatalRecoveryHandler and fatalRecoveryHandler("Main-Crash: "..tostring(err), nil) then
+    return
+  end
+
+  error(err)
+end

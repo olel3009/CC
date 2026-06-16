@@ -15,6 +15,7 @@ local activeSends = {}
 local buttons = {}
 local rowTargets = {}
 local selectedMinerId = nil
+local listPage = 1
 local monitor = nil
 local monitorSide = nil
 local statsDiskPath = nil
@@ -280,17 +281,6 @@ local function rememberMiner(sender, message)
   end
 end
 
-local function sortedMinerIds()
-  local ids = {}
-
-  for id in pairs(miners) do
-    table.insert(ids, id)
-  end
-
-  table.sort(ids, function(a, b) return tostring(a) < tostring(b) end)
-  return ids
-end
-
 local function writeAt(target, x, y, text, fg, bg)
   local w, h = target.getSize()
   text = tostring(text or "")
@@ -391,7 +381,44 @@ local function ageColor(age)
   return colors.lime
 end
 
+local function isRecoveryStatus(status)
+  local text = tostring(status.alert or status.state or status.kind or "")
+  return string.find(text, "recovery", 1, true) ~= nil
+end
+
+local function statusPriority(id)
+  local entry = miners[id]
+  if not entry then return 99 end
+
+  local status = entry.status or {}
+  local age = math.floor((now() - entry.last) / 1000)
+
+  if isRecoveryStatus(status) then return 1 end
+  if age > MINER_STALE_AFTER then return 2 end
+  if status.state == "crashed" or status.state == "startup_error" or status.state == "stopped" then return 3 end
+  if status.alert then return 4 end
+  if status.state == "waiting" then return 5 end
+  return 9
+end
+
+local function sortedMinerIds()
+  local ids = {}
+
+  for id in pairs(miners) do
+    table.insert(ids, id)
+  end
+
+  table.sort(ids, function(a, b)
+    local pa, pb = statusPriority(a), statusPriority(b)
+    if pa ~= pb then return pa < pb end
+    return tostring(a) < tostring(b)
+  end)
+
+  return ids
+end
+
 local function stateColor(status)
+  if isRecoveryStatus(status) then return colors.purple end
   if status.state == "crashed" or status.state == "startup_error" or status.state == "stopped" then return colors.red end
   if status.alert then return colors.red end
   if status.state == "waiting" then return colors.yellow end
@@ -554,6 +581,7 @@ local function drawMonitor()
   local onlineCount = 0
   local alertCount = 0
   local waitingCount = 0
+  local recoveryCount = 0
   local totalMined = 0
   local totalRate = 0
   local fuelSum = 0
@@ -568,6 +596,7 @@ local function drawMonitor()
     if age <= MINER_ONLINE_AFTER then onlineCount = onlineCount + 1 end
     if s.alert or age > MINER_STALE_AFTER then alertCount = alertCount + 1 end
     if s.state == "waiting" then waitingCount = waitingCount + 1 end
+    if isRecoveryStatus(s) then recoveryCount = recoveryCount + 1 end
 
     totalMined = totalMined + (tonumber(s.minedTotal) or 0)
     totalRate = totalRate + (tonumber(s.minedLastMinuteTotal) or 0)
@@ -634,6 +663,15 @@ local function drawMonitor()
   addButton("clear", "CLEAR", bx, actionY + 20, buttonW, 3, colors.gray, colors.white, function()
     miners = {}
     selectedMinerId = nil
+    listPage = 1
+  end)
+
+  addButton("page_prev", "PAGE -", bx, actionY + 24, buttonW, 3, colors.gray, colors.white, function()
+    listPage = math.max(1, listPage - 1)
+  end)
+
+  addButton("page_next", "PAGE +", bx, actionY + 28, buttonW, 3, colors.gray, colors.white, function()
+    listPage = listPage + 1
   end)
 
   for _,button in ipairs(buttons) do
@@ -647,7 +685,7 @@ local function drawMonitor()
   drawMetric(monitor, 1, cardY, cardW, 5, "FLEET", onlineCount.."/"..minerCount, alertCount.." alerts", alertCount > 0 and colors.red or colors.green)
   drawMetric(monitor, cardW + 2, cardY, cardW, 5, "FUEL", math.floor(avgFuel * 100 + 0.5).."%", "avg reserve", avgFuel < 0.25 and colors.orange or colors.cyan)
   drawMetric(monitor, cardW * 2 + 3, cardY, cardW, 5, "ORE/MIN", shortNumber(totalRate), "last sample", colors.yellow)
-  drawMetric(monitor, cardW * 3 + 4, cardY, math.max(4, mainW - (cardW * 3 + 3)), 5, "TOTAL", shortNumber(totalMined), waitingCount.." waiting", colors.purple)
+  drawMetric(monitor, cardW * 3 + 4, cardY, math.max(4, mainW - (cardW * 3 + 3)), 5, "RECOVERY", tostring(recoveryCount), waitingCount.." waiting", recoveryCount > 0 and colors.purple or colors.gray)
 
   local chartY = cardY + 6
   local chartH = 6
@@ -681,14 +719,32 @@ local function drawMonitor()
   local listH = h - listY + 1 - detailRows
   if detailRows > 0 then listH = listH - 1 end
 
-  drawPanel(monitor, 1, listY, mainW, math.max(3, listH), "ACTIVE MINERS", colors.gray)
+  local rowsPerPage = math.max(1, listH - 2)
+  local pageCount = math.max(1, math.ceil(minerCount / rowsPerPage))
+  if listPage > pageCount then listPage = pageCount end
+  if listPage < 1 then listPage = 1 end
+
+  drawPanel(monitor, 1, listY, mainW, math.max(3, listH), "ACTIVE MINERS "..listPage.."/"..pageCount, colors.gray)
 
   if minerCount == 0 then
     writeAt(monitor, 3, listY + 2, "Waiting for miner_status packets...", colors.lightGray, colors.black)
   else
-    local row = listY + 2
+    local headerY = listY + 1
+    writeAt(monitor, 3, headerY, "ID", colors.lightGray, colors.black)
+    writeAt(monitor, 9, headerY, "STATE", colors.lightGray, colors.black)
+    writeAt(monitor, 24, headerY, "AGE", colors.lightGray, colors.black)
+    writeAt(monitor, 31, headerY, "FUEL", colors.lightGray, colors.black)
+    writeAt(monitor, 39, headerY, "RATE", colors.lightGray, colors.black)
+    if mainW > 54 then
+      writeAt(monitor, 47, headerY, "POS", colors.lightGray, colors.black)
+    end
 
-    for _,id in ipairs(ids) do
+    local row = listY + 2
+    local firstIndex = (listPage - 1) * rowsPerPage + 1
+    local lastIndex = math.min(minerCount, firstIndex + rowsPerPage - 1)
+
+    for index=firstIndex,lastIndex do
+      local id = ids[index]
       if row >= listY + listH then break end
 
       local entry = miners[id]
@@ -707,24 +763,20 @@ local function drawMonitor()
         stateCol = colors.red
       end
 
-      fill(monitor, 2, row, mainW - 2, 2, bg)
+      fill(monitor, 2, row, mainW - 2, 1, bg)
       rowTargets[row] = id
-      rowTargets[row + 1] = id
 
       writeAt(monitor, 3, row, "#"..safeText(id, 4), colors.white, bg)
-      writeAt(monitor, 9, row, safeText(state, 12), stateCol, bg)
-      writeAt(monitor, 23, row, tostring(age).."s", ageColor(age), bg)
-      writeAt(monitor, 31, row, shortNumber(status.minedLastMinuteTotal or 0).."/m", colors.yellow, bg)
+      writeAt(monitor, 9, row, safeText(state, 14), stateCol, bg)
+      writeAt(monitor, 24, row, tostring(age).."s", ageColor(age), bg)
+      writeAt(monitor, 31, row, tostring(math.floor(fuelPct * 100 + 0.5)).."%", fuelColor(status), bg)
+      writeAt(monitor, 39, row, shortNumber(status.minedLastMinuteTotal or 0).."/m", colors.yellow, bg)
 
-      if mainW > 48 then
-        writeAt(monitor, 40, row, safeText(pos, mainW - 40), colors.lightBlue, bg)
+      if mainW > 54 then
+        writeAt(monitor, 47, row, safeText(pos, mainW - 47), colors.lightBlue, bg)
       end
 
-      writeAt(monitor, 3, row + 1, "fuel", colors.lightGray, bg)
-      drawBar(monitor, 9, row + 1, math.max(6, mainW - 26), fuelPct, fuelColor(status), bg, colors.gray)
-      writeAt(monitor, mainW - 14, row + 1, math.floor(fuelPct * 100 + 0.5).."%", fuelColor(status), bg)
-
-      row = row + 3
+      row = row + 1
     end
   end
 
@@ -753,6 +805,8 @@ local function drawMonitor()
     writeAt(monitor, 3, detailY + 4, safeText("Pos "..tostring(s.x)..","..tostring(s.y)..","..tostring(s.z).."  Cmd "..tostring(s.lastCommand or "-").."#"..tostring(s.lastCommandSeq or "-"), mainW - 4), colors.lightBlue, colors.black)
     if s.crashError then
       writeAt(monitor, 3, detailY + 5, safeText("Error "..tostring(s.crashError), mainW - 4), colors.red, colors.black)
+    elseif s.recoveryX then
+      writeAt(monitor, 3, detailY + 5, safeText("Recovery "..tostring(s.recoveryX)..","..tostring(s.recoveryY)..","..tostring(s.recoveryZ).." r="..tostring(s.recoveryRadius or "-"), mainW - 4), colors.purple, colors.black)
     end
     writeAt(monitor, 3, detailY + 6, "ORE", colors.yellow, colors.black)
     drawSparkline(monitor, 8, detailY + 6, math.max(1, mainW - 8), minedValues, math.max(1, minedMax), colors.yellow, colors.black)
