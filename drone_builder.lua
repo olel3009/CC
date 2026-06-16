@@ -144,75 +144,32 @@ local function countEnderChests()
   return total
 end
 
-local function hasRequirements()
-  local turtleSlot = findSlot(isTurtleItem)
-  local scannerSlot = findSlot(isScannerItem)
-  local pickaxeSlot = findSlot(isPickaxeItem)
-  local modemSlot = findSlot(isModemItem)
-  local blockerSlot = findBlockerSlotFixed()
+local function countMatchingItems(testFn)
+  local total = 0
 
-  return turtleSlot and scannerSlot and pickaxeSlot and modemSlot and countEnderChests() >= 2 and blockerSlot
-end
+  for slot=1,16 do
+    local detail = item(slot)
 
-local function faceSupply()
-  turtle.turnRight()
-  turtle.turnRight()
-end
-
-local function faceBuild()
-  turtle.turnRight()
-  turtle.turnRight()
-end
-
-local function pullOneFromSupply()
-  faceSupply()
-  local ok = turtle.suck(1)
-  faceBuild()
-  return ok
-end
-
-local function ensureRequirements(droneIndex)
-  local pulls = 0
-
-  while not hasRequirements() do
-    if not pullOneFromSupply() then
-      error("Kiste hinten hat nicht genug Material fuer Drone #"..droneIndex..".")
-    end
-
-    pulls = pulls + 1
-
-    if pulls > 512 then
-      error("Zu viele Items gezogen, aber Requirements fehlen weiter. Pruefe Item-Namen und Kisteninhalt.")
-    end
-
-    local empty = false
-    for slot=1,16 do
-      if turtle.getItemCount(slot) == 0 then
-        empty = true
-        break
-      end
-    end
-
-    if not empty and not hasRequirements() then
-      error("Builder-Inventar voll, aber Requirements fehlen. Lege nur Drone-Material und Dummy-Blocker in die Kiste.")
+    if detail and testFn(detail) then
+      total = total + turtle.getItemCount(slot)
     end
   end
+
+  return total
 end
 
-local function selectSlot(slot, label)
-  if not slot then
-    error(label.." fehlt.")
+local function currentBlockerInfo()
+  for slot=1,16 do
+    local detail = item(slot)
+
+    if detail and not isSpecialItem(detail) then
+      return detail.name, countMatchingItems(function(other)
+        return not isSpecialItem(other) and other.name == detail.name
+      end)
+    end
   end
 
-  turtle.select(slot)
-end
-
-local function dropFront(slot, count, label)
-  selectSlot(slot, label)
-
-  if not turtle.drop(count) then
-    error(label.." konnte nicht in die neue Drone gelegt werden.")
-  end
+  return nil, 0
 end
 
 local function snapshotInventory()
@@ -244,6 +201,126 @@ local function findChangedSlot(snapshot)
   end
 
   return nil
+end
+
+local function hasRequirements()
+  local turtleSlot = findSlot(isTurtleItem)
+  local scannerSlot = findSlot(isScannerItem)
+  local pickaxeSlot = findSlot(isPickaxeItem)
+  local modemSlot = findSlot(isModemItem)
+  local blockerSlot = findBlockerSlotFixed()
+
+  return turtleSlot and scannerSlot and pickaxeSlot and modemSlot and countEnderChests() >= 2 and blockerSlot
+end
+
+local function shouldKeepPulledItem(slot)
+  local detail = item(slot)
+
+  if not detail then return false end
+  if isTurtleItem(detail) then return countMatchingItems(isTurtleItem) <= 1 end
+  if isScannerItem(detail) then return countMatchingItems(isScannerItem) <= 1 end
+  if isPickaxeItem(detail) then return countMatchingItems(isPickaxeItem) <= 1 end
+  if isModemItem(detail) then return countMatchingItems(isModemItem) <= 1 end
+  if isEnderStorageItem(detail) then return countEnderChests() <= 2 end
+
+  local blockerName, blockerCount = currentBlockerInfo()
+
+  if blockerCount > BLOCKER_COUNT then
+    return false
+  end
+
+  return not blockerName or detail.name == blockerName
+end
+
+local function faceSupply()
+  turtle.turnRight()
+  turtle.turnRight()
+end
+
+local function faceBuild()
+  turtle.turnRight()
+  turtle.turnRight()
+end
+
+local function pullOneFromSupply()
+  local snapshot = snapshotInventory()
+
+  faceSupply()
+  local ok = turtle.suck(1)
+  faceBuild()
+
+  if not ok then return false, false end
+
+  local pulledSlot = findChangedSlot(snapshot)
+
+  if pulledSlot and shouldKeepPulledItem(pulledSlot) then
+    return true, true
+  end
+
+  if pulledSlot then
+    turtle.select(pulledSlot)
+    faceSupply()
+    turtle.drop(1)
+    faceBuild()
+  end
+
+  return true, false
+end
+
+local function ensureRequirements(droneIndex)
+  local pulls = 0
+  local rejected = 0
+
+  while not hasRequirements() do
+    local gotItem, keptItem = pullOneFromSupply()
+
+    if not gotItem then
+      error("Kiste hinten hat nicht genug Material fuer Drone #"..droneIndex..".")
+    end
+
+    pulls = pulls + 1
+    if keptItem then
+      rejected = 0
+    else
+      rejected = rejected + 1
+    end
+
+    if pulls > 512 then
+      error("Zu viele Items gezogen, aber Requirements fehlen weiter. Pruefe Item-Namen und Kisteninhalt.")
+    end
+
+    if rejected > 64 then
+      error("Kiste gibt nur nicht benoetigte Items aus. Sortiere die benoetigten Items weiter nach vorne oder mische die Kiste.")
+    end
+
+    local empty = false
+    for slot=1,16 do
+      if turtle.getItemCount(slot) == 0 then
+        empty = true
+        break
+      end
+    end
+
+    if not empty and not hasRequirements() then
+      error("Builder-Inventar voll, aber Requirements fehlen. Lege nur Drone-Material und Dummy-Blocker in die Kiste.")
+    end
+  end
+end
+
+local function selectSlot(slot, label)
+  if not slot then
+    error(label.." fehlt.")
+  end
+
+  turtle.select(slot)
+end
+
+local function dropFront(slot, count, label)
+  selectSlot(slot, label)
+
+  if not turtle.drop(count) then
+    error(label.." konnte nicht in die neue Drone gelegt werden.")
+  end
 end
 
 local function isFuelSlot(slot)
