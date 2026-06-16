@@ -21,7 +21,7 @@ local RANDOM_MOVE_MIN = 6
 local RANDOM_MOVE_MAX = 18
 local MIN_START_DEPTH_BELOW_TOP = 20
 local MAX_DISTANCE_FROM_SHAFT = 70
-local STATUS_INTERVAL = 15
+local STATUS_INTERVAL = 120
 local COMMAND_WAIT = 5
 local ADMIN_PROTOCOL = "miner_admin"
 local MODEM_SLOT = 13
@@ -31,6 +31,7 @@ local WORK_SLOT_LAST = 12
 
 local CONFIG_TOP_Y = 63
 local CONFIG_LOWEST_Y = -50
+local CONFIG_HIGHEST_NORMAL_TARGET_Y = 40
 local CONFIG_NETHERITE_TARGET_Y = 15
 local CONFIG_HEADING = 0
 
@@ -136,6 +137,7 @@ local heading = 0
 local storageHeading = 0
 local fuelHeading = 2
 local topY, targetY = nil, nil
+local normalLowestY = CONFIG_LOWEST_Y
 local miningMode = "normal"
 local wantedOres = nil
 local wantedOrePatterns = nil
@@ -870,38 +872,40 @@ local function fuelLimit()
   return 999999999
 end
 
-local function chooseNormalTargetY(currentTopY)
-  local lowestY = CONFIG_LOWEST_Y
-  local safeTopY = tonumber(currentTopY) or tonumber(y) or CONFIG_TOP_Y
-  local highestStartY = math.floor(safeTopY - MIN_START_DEPTH_BELOW_TOP)
+local function chooseNormalTargetY()
+  local lowestY = normalLowestY or CONFIG_LOWEST_Y
+  local highestStartY = CONFIG_HIGHEST_NORMAL_TARGET_Y
 
   lowestY = math.floor(lowestY)
+  highestStartY = math.floor(highestStartY)
 
   if highestStartY < lowestY then
-    log("Start-Y ist zu tief fuer zufaellige Zielhoehe. Nutze aktuelle/naechste sichere Zielhoehe.")
-
-    local currentY = tonumber(y)
-    if currentY and currentY < lowestY then
-      currentY = math.floor(currentY)
-      return currentY, currentY, currentY
-    end
-
     return lowestY, lowestY, lowestY
   end
 
-  return math.random(lowestY, highestStartY), lowestY, highestStartY
+  local id = tonumber(computerId()) or math.random(0, highestStartY - lowestY)
+  local target = lowestY + (math.abs(id) % (highestStartY - lowestY + 1))
+
+  return target, lowestY, highestStartY
 end
 
 local function ensureTargetY()
-  if type(targetY) == "number" then return end
-
   if miningMode == "netherite" then
+    if type(targetY) == "number" then return end
+
     targetY = CONFIG_NETHERITE_TARGET_Y
+    log("Ziel-Y fehlte im State. Setze Ziel-Y auf "..targetY..".")
   else
-    targetY = y or CONFIG_LOWEST_Y
+    local previousTargetY = targetY
+    local lowestY, highestStartY
+
+    targetY, lowestY, highestStartY = chooseNormalTargetY()
+
+    if previousTargetY ~= targetY then
+      log("Normale Mining-Y aus Miner-ID verteilt: "..targetY.." (zwischen "..lowestY.." und "..highestStartY..").")
+    end
   end
 
-  log("Ziel-Y fehlte im State. Setze Ziel-Y auf "..targetY..".")
   save()
 end
 
@@ -924,6 +928,7 @@ save = function()
     fuelHeading=fuelHeading,
     topY=topY,
     targetY=targetY,
+    normalLowestY=normalLowestY,
     miningMode=miningMode,
     wantedOres=wantedOres,
     wantedOrePatterns=wantedOrePatterns,
@@ -978,6 +983,7 @@ local function setup()
 
   heading = autoDetectStartHeading() or CONFIG_HEADING
   print("Startausrichtung: "..headingName(heading).." ("..heading..")")
+  normalLowestY = CONFIG_LOWEST_Y
 
   local setupBlocks, setupErr = setupScan(MIN_SCAN_RADIUS)
   if setupBlocks and looksLikeNether(setupBlocks) then
@@ -992,8 +998,8 @@ local function setup()
 
     miningMode = "normal"
     local lowestY, highestStartY
-    targetY, lowestY, highestStartY = chooseNormalTargetY(topY)
-    print("Zufaellige Mining-Start-Y: "..targetY.." (zwischen "..lowestY.." und "..highestStartY..")")
+    targetY, lowestY, highestStartY = chooseNormalTargetY()
+    print("Verteilte Mining-Start-Y: "..targetY.." (zwischen "..lowestY.." und "..highestStartY..")")
   end
 
   fuelHeading = heading
@@ -1022,6 +1028,7 @@ if fs.exists(STATE) then
     fuelHeading=s.fuelHeading
     topY=s.topY
     targetY=s.targetY
+    normalLowestY=s.normalLowestY or CONFIG_LOWEST_Y
     miningMode=s.miningMode or "normal"
     wantedOres=s.wantedOres
     wantedOrePatterns=s.wantedOrePatterns
@@ -1131,6 +1138,7 @@ local function statusPayload(kind)
     miningMode=miningMode,
     wantedOres=wantedOres,
     wantedOrePatterns=wantedOrePatterns,
+    normalLowestY=normalLowestY,
     targetY=targetY,
     minedLastMinute=mined,
     minedLastMinuteTotal=tableCount(mined),
@@ -1163,6 +1171,17 @@ local function sendStatus(kind, resetMinute)
   end
 
   return true
+end
+
+local function sendAlert(alert, kind)
+  minerAlert = alert
+  return sendStatus(kind or alert or "alert", false)
+end
+
+local function clearAlert(alert)
+  if not alert or minerAlert == alert then
+    minerAlert = nil
+  end
 end
 
 local function commandTargetsThisMiner(cmd)
@@ -1393,13 +1412,17 @@ local function applyAdminCommand(sender, cmd)
     if tz then mineCenterZ = math.floor(tz + 0.5) end
   end
 
-  if ty then targetY = math.floor(ty + 0.5) end
-
   if cmd.mode == "netherite" or action == "netherite" then
     miningMode = "netherite"
+    if ty then targetY = math.floor(ty + 0.5) end
     if not ty then targetY = CONFIG_NETHERITE_TARGET_Y end
   elseif cmd.mode == "normal" then
     miningMode = "normal"
+    if ty then normalLowestY = math.floor(ty + 0.5) end
+    targetY = chooseNormalTargetY()
+  elseif ty and miningMode == "normal" then
+    normalLowestY = math.floor(ty + 0.5)
+    targetY = chooseNormalTargetY()
   end
 
   if action == "unload" then pendingUnload = true end
@@ -1541,11 +1564,13 @@ local function checkFuel()
     end
 
     log("Turtle-Fuel zu niedrig. Warte auf Fuel in der Turtle.")
+    sendAlert("low_fuel_wait", "low_fuel_wait")
 
     while fuel() < LOW_FUEL_STOP do
       sleep(10)
     end
 
+    clearAlert("low_fuel_wait")
     log("Fuel wieder ausreichend: "..fuel().." / "..fuelLimit())
   end
 end
@@ -2566,7 +2591,9 @@ local function ensureCanReturn()
 
   if fuel() < needed and not (x==homeX and z==homeZ and y==topY) then
     log("Fuel wird knapp. Fuel="..fuel().." benoetigt~"..needed)
+    sendAlert("low_return_fuel", "low_return_fuel")
     unload()
+    clearAlert("low_return_fuel")
   end
 end
 

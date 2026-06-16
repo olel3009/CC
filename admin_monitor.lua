@@ -2,6 +2,8 @@ local PROTOCOL = "miner_admin"
 local DEFAULT_DURATION = 90
 local SEND_EVERY = 2
 local REDRAW_EVERY = 1
+local MINER_ONLINE_AFTER = 150
+local MINER_STALE_AFTER = 300
 local QUEUE_FILE = "admin_monitor_command_queue"
 local MAX_HISTORY = 30
 local DISK_MIN_FREE = 4096
@@ -134,6 +136,7 @@ local function appendStatsLog(id, message)
     minedTotal=message.minedTotal,
     miningMode=message.miningMode,
     wantedOrePatterns=message.wantedOrePatterns,
+    normalLowestY=message.normalLowestY,
     targetY=message.targetY
   }))
   f.close()
@@ -562,8 +565,8 @@ local function drawMonitor()
     local fuel = tonumber(s.fuel) or 0
     local limit = tonumber(s.fuelLimit) or 1
 
-    if age <= 90 then onlineCount = onlineCount + 1 end
-    if s.alert or age > 180 then alertCount = alertCount + 1 end
+    if age <= MINER_ONLINE_AFTER then onlineCount = onlineCount + 1 end
+    if s.alert or age > MINER_STALE_AFTER then alertCount = alertCount + 1 end
     if s.state == "waiting" then waitingCount = waitingCount + 1 end
 
     totalMined = totalMined + (tonumber(s.minedTotal) or 0)
@@ -696,14 +699,20 @@ local function drawMonitor()
       local fuelPct = fuel / math.max(1, limit)
       local bg = selectedMinerId == id and colors.gray or colors.black
       local state = status.alert or status.state or status.kind or "?"
+      local stateCol = stateColor(status)
       local pos = tostring(status.x)..","..tostring(status.y)..","..tostring(status.z)
+
+      if age > MINER_STALE_AFTER then
+        state = "stale"
+        stateCol = colors.red
+      end
 
       fill(monitor, 2, row, mainW - 2, 2, bg)
       rowTargets[row] = id
       rowTargets[row + 1] = id
 
       writeAt(monitor, 3, row, "#"..safeText(id, 4), colors.white, bg)
-      writeAt(monitor, 9, row, safeText(state, 12), stateColor(status), bg)
+      writeAt(monitor, 9, row, safeText(state, 12), stateCol, bg)
       writeAt(monitor, 23, row, tostring(age).."s", ageColor(age), bg)
       writeAt(monitor, 31, row, shortNumber(status.minedLastMinuteTotal or 0).."/m", colors.yellow, bg)
 
@@ -740,7 +749,7 @@ local function drawMonitor()
     writeAt(monitor, 3, detailY + 1, "State "..safeText(s.alert or s.state or s.kind, 14), stateColor(s), colors.black)
     writeAt(monitor, 24, detailY + 1, "Fuel "..tostring(s.fuel).."/"..tostring(s.fuelLimit), fuelColor(s), colors.black)
     writeAt(monitor, 3, detailY + 2, "Total "..shortNumber(s.minedTotal).."  Last "..shortNumber(s.minedLastMinuteTotal or 0).."/min", colors.yellow, colors.black)
-    writeAt(monitor, 3, detailY + 3, safeText("Mode "..tostring(s.miningMode).." / "..oreMode.."  Y "..tostring(s.targetY), mainW - 4), colors.lightGray, colors.black)
+    writeAt(monitor, 3, detailY + 3, safeText("Mode "..tostring(s.miningMode).." / "..oreMode.."  Y "..tostring(s.targetY).."  low "..tostring(s.normalLowestY or "-"), mainW - 4), colors.lightGray, colors.black)
     writeAt(monitor, 3, detailY + 4, safeText("Pos "..tostring(s.x)..","..tostring(s.y)..","..tostring(s.z).."  Cmd "..tostring(s.lastCommand or "-").."#"..tostring(s.lastCommandSeq or "-"), mainW - 4), colors.lightBlue, colors.black)
     if s.crashError then
       writeAt(monitor, 3, detailY + 5, safeText("Error "..tostring(s.crashError), mainW - 4), colors.red, colors.black)
