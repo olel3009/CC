@@ -1,5 +1,5 @@
 -- startup.lua
--- Auto Ore Miner v19
+-- Auto Ore Miner v20
 -- Fix: Scanner-Koordinaten werden als Minecraft-Weltachsen behandelt.
 -- Setup erkennt die Startausrichtung nach Moeglichkeit automatisch ueber die Fuel-Kiste.
 -- Fallback ist fest konfiguriert: aktuelle Y 63, Facing north, tiefste Ziel-Y -50.
