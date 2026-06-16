@@ -126,6 +126,10 @@ local function processActiveSends()
           rednet.broadcast(message, PROTOCOL)
         end
 
+        if message.command == "set_recovery" or message.command == "recovery" or message.command == "recover" then
+          log("SEND REC cmd="..tostring(message.command).." target="..tostring(message.targetId).." x="..tostring(message.x).." y="..tostring(message.y).." z="..tostring(message.z).." r="..tostring(message.radius))
+        end
+
         entry.nextAt = t + SEND_EVERY * 1000
       end
 

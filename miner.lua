@@ -1844,14 +1844,33 @@ function waitForRecoveryCoords(reason, missingSlot)
   minerState = "recovery_wait_coords"
   minerAlert = "missing_recovery_coords"
   debugLog("REC wait coords reason="..tostring(reason).." slot="..tostring(missingSlot))
+  local lastWaitStatusAt = 0
 
   while not (recoveryX and recoveryY and recoveryZ) do
     save()
-    sendStatus("missing_recovery_coords", false)
     debugLog("REC need coords rx="..tostring(recoveryX).." ry="..tostring(recoveryY).." rz="..tostring(recoveryZ))
-    pollAdminCommands(COMMAND_WAIT)
-    sleep(2)
+
+    if os.epoch("utc") - lastWaitStatusAt >= 10000 then
+      sendStatus("missing_recovery_coords", false)
+      lastWaitStatusAt = os.epoch("utc")
+    end
+
+    if openWirelessModem() then
+      local sender, message = rednet.receive(ADMIN_PROTOCOL, COMMAND_WAIT)
+
+      if sender and message then
+        debugLog("REC got cmd sender="..tostring(sender).." type="..tostring(type(message)))
+        applyAdminCommand(sender, message)
+      else
+        debugLog("REC no cmd")
+      end
+    else
+      debugLog("REC no modem")
+      sleep(COMMAND_WAIT)
+    end
   end
+
+  unequipEnderModem()
 
   debugLog("REC coords arrived rx="..tostring(recoveryX).." ry="..tostring(recoveryY).." rz="..tostring(recoveryZ))
 
