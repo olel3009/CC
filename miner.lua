@@ -8,6 +8,12 @@
 
 STATE = "miner_state"
 STATE_VERSION = 19
+STARTUP_FILE = "startup.lua"
+STARTUP_UPDATE_FILE = "startup.lua.new"
+STARTUP_BACKUP_FILE = "startup.lua.old"
+STARTUP_URL = "https://raw.githubusercontent.com/olel3009/CC/main/startup.lua"
+REQUIRED_STARTUP_VERSION = 2
+MIN_STARTUP_SIZE = 1000
 
 MAX_SCAN_RADIUS = 15
 MIN_SCAN_RADIUS = 4
@@ -184,6 +190,87 @@ function readTable(path)
   local data = textutils.unserialize(f.readAll())
   f.close()
   return data
+end
+
+function readFile(path)
+  if not fs.exists(path) then return nil end
+
+  local f = fs.open(path, "r")
+  local text = f.readAll()
+  f.close()
+  return text
+end
+
+function startupDownloadUrl()
+  if os.epoch then
+    return STARTUP_URL.."?t="..tostring(os.epoch("utc"))
+  end
+
+  return STARTUP_URL
+end
+
+function localStartupVersion()
+  local text = readFile(STARTUP_FILE)
+  if not text then return 0 end
+
+  local version = string.match(text, "STARTUP_VERSION%s*=%s*(%d+)")
+  return tonumber(version) or 0
+end
+
+function validateStartupFile(path)
+  if not fs.exists(path) then
+    return false, "Datei fehlt"
+  end
+
+  local size = fs.getSize(path)
+  if size < MIN_STARTUP_SIZE then
+    return false, "Datei zu klein: "..tostring(size).." Bytes"
+  end
+
+  local program, err = loadfile(path)
+  if not program then
+    return false, "Lua-Syntaxfehler: "..tostring(err)
+  end
+
+  return true
+end
+
+function ensureStartupVersion()
+  local current = localStartupVersion()
+  if current >= REQUIRED_STARTUP_VERSION then
+    return true
+  end
+
+  log("Startup-Version zu alt: "..tostring(current).." < "..REQUIRED_STARTUP_VERSION..". Lade Update.")
+
+  if fs.exists(STARTUP_UPDATE_FILE) then
+    fs.delete(STARTUP_UPDATE_FILE)
+  end
+
+  local ok = shell.run("wget", startupDownloadUrl(), STARTUP_UPDATE_FILE)
+  if not ok or not fs.exists(STARTUP_UPDATE_FILE) then
+    log("Startup-Update durch Miner fehlgeschlagen.")
+    return false
+  end
+
+  local valid, err = validateStartupFile(STARTUP_UPDATE_FILE)
+  if not valid then
+    log("Startup-Update durch Miner verworfen: "..tostring(err))
+    fs.delete(STARTUP_UPDATE_FILE)
+    return false
+  end
+
+  if fs.exists(STARTUP_BACKUP_FILE) then
+    fs.delete(STARTUP_BACKUP_FILE)
+  end
+
+  if fs.exists(STARTUP_FILE) then
+    fs.move(STARTUP_FILE, STARTUP_BACKUP_FILE)
+  end
+
+  fs.move(STARTUP_UPDATE_FILE, STARTUP_FILE)
+  log("Startup durch Miner aktualisiert auf Version "..REQUIRED_STARTUP_VERSION..".")
+  return true
 end
 
 save = nil
@@ -3446,6 +3533,7 @@ function miningLoop()
 end
 
 function main()
+  ensureStartupVersion()
   loadOrSetupState()
   log("Gestartet.")
   log("Position: x="..x.." y="..y.." z="..z.." heading="..heading)

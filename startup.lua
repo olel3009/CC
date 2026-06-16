@@ -1,4 +1,5 @@
 local STARTUP_URL = "https://raw.githubusercontent.com/olel3009/CC/main/startup.lua"
+local STARTUP_VERSION = 2
 local STARTUP_FILE = "startup.lua"
 local STARTUP_UPDATE_FILE = "startup.lua.new"
 local STARTUP_BACKUP_FILE = "startup.lua.old"
@@ -19,18 +20,66 @@ local function computerId()
   return nil
 end
 
+local function lowerName(name)
+  return string.lower(tostring(name or ""))
+end
+
+local function isModemItemName(name)
+  return string.find(lowerName(name), "modem", 1, true) ~= nil
+end
+
+local function findModemSlot()
+  if not turtle or not turtle.getItemDetail then
+    return nil
+  end
+
+  for i=1,16 do
+    local item = turtle.getItemDetail(i)
+    if item and isModemItemName(item.name) then
+      return i
+    end
+  end
+
+  return nil
+end
+
+local function equipModemFromInventory()
+  if not turtle then return false end
+
+  local slot = findModemSlot()
+  if not slot then return false end
+
+  turtle.select(slot)
+
+  if turtle.equipRight and turtle.equipRight() then
+    return true
+  end
+
+  if turtle.equipLeft and turtle.equipLeft() then
+    return true
+  end
+
+  return false
+end
+
 local function openWirelessModem()
-  for _,name in ipairs(peripheral.getNames()) do
-    if peripheral.getType(name) == "modem" then
-      local modem = peripheral.wrap(name)
+  for attempt=1,2 do
+    for _,name in ipairs(peripheral.getNames()) do
+      if peripheral.getType(name) == "modem" then
+        local modem = peripheral.wrap(name)
 
-      if modem and modem.isWireless and modem.isWireless() then
-        if not rednet.isOpen(name) then
-          rednet.open(name)
+        if modem and modem.isWireless and modem.isWireless() then
+          if not rednet.isOpen(name) then
+            rednet.open(name)
+          end
+
+          return true
         end
-
-        return true
       end
+    end
+
+    if attempt == 1 and not equipModemFromInventory() then
+      break
     end
   end
 
