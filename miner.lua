@@ -1141,48 +1141,50 @@ local function setup()
   save()
 end
 
-if fs.exists(STATE) then
-  local s = readTable(STATE)
+local function loadOrSetupState()
+  if fs.exists(STATE) then
+    local s = readTable(STATE)
 
-  if type(s) == "table" and s.version == STATE_VERSION then
-    x=s.x
-    y=s.y
-    z=s.z
-    homeX=s.homeX or s.x or 0
-    homeZ=s.homeZ or s.z or 0
-    mineCenterX=s.mineCenterX or homeX
-    mineCenterZ=s.mineCenterZ or homeZ
-    mineMinX=s.mineMinX
-    mineMaxX=s.mineMaxX
-    mineMinZ=s.mineMinZ
-    mineMaxZ=s.mineMaxZ
-    heading=s.heading
-    storageHeading=s.storageHeading
-    fuelHeading=s.fuelHeading
-    topY=s.topY
-    targetY=s.targetY
-    normalLowestY=s.normalLowestY or CONFIG_LOWEST_Y
-    miningMode=s.miningMode or "normal"
-    wantedOres=s.wantedOres
-    wantedOrePatterns=s.wantedOrePatterns
-    recoveryX=s.recoveryX
-    recoveryY=s.recoveryY
-    recoveryZ=s.recoveryZ
-    recoveryRadius=s.recoveryRadius or recoveryRadius
-    adminId=s.adminId
-    adminStartReceived = s.adminStartReceived ~= false
-    log("Resume gefunden.")
-    gpsHeadingCalibration("Resume", false)
+    if type(s) == "table" and s.version == STATE_VERSION then
+      x=s.x
+      y=s.y
+      z=s.z
+      homeX=s.homeX or s.x or 0
+      homeZ=s.homeZ or s.z or 0
+      mineCenterX=s.mineCenterX or homeX
+      mineCenterZ=s.mineCenterZ or homeZ
+      mineMinX=s.mineMinX
+      mineMaxX=s.mineMaxX
+      mineMinZ=s.mineMinZ
+      mineMaxZ=s.mineMaxZ
+      heading=s.heading
+      storageHeading=s.storageHeading
+      fuelHeading=s.fuelHeading
+      topY=s.topY
+      targetY=s.targetY
+      normalLowestY=s.normalLowestY or CONFIG_LOWEST_Y
+      miningMode=s.miningMode or "normal"
+      wantedOres=s.wantedOres
+      wantedOrePatterns=s.wantedOrePatterns
+      recoveryX=s.recoveryX
+      recoveryY=s.recoveryY
+      recoveryZ=s.recoveryZ
+      recoveryRadius=s.recoveryRadius or recoveryRadius
+      adminId=s.adminId
+      adminStartReceived = s.adminStartReceived ~= false
+      log("Resume gefunden.")
+      gpsHeadingCalibration("Resume", false)
+    else
+      fs.delete(STATE)
+      setup()
+    end
   else
-    fs.delete(STATE)
     setup()
   end
-else
-  setup()
-end
 
-repairStartupEquipment()
-ensureTargetY()
+  repairStartupEquipment()
+  ensureTargetY()
+end
 
 local function isOre(name)
   if not name then return false end
@@ -1658,13 +1660,6 @@ local function waitForAdminStart()
   lastStatusAt = os.epoch("utc")
   minerState = "mining"
 end
-
-log("Gestartet.")
-log("Position: x="..x.." y="..y.." z="..z.." heading="..heading)
-log("Top-Y: "..topY)
-log("Ziel-Y: "..targetY)
-log("Mining-Modus: "..miningMode)
-log("Turtle-Fuel: "..fuel().." / "..fuelLimit())
 
 local function turnRight()
   turtle.turnRight()
@@ -3366,6 +3361,13 @@ local function miningLoop()
 end
 
 local function main()
+  loadOrSetupState()
+  log("Gestartet.")
+  log("Position: x="..x.." y="..y.." z="..z.." heading="..heading)
+  log("Top-Y: "..tostring(topY))
+  log("Ziel-Y: "..tostring(targetY))
+  log("Mining-Modus: "..tostring(miningMode))
+  log("Turtle-Fuel: "..fuel().." / "..fuelLimit())
   locateGps(false)
   requireReservedChest(MODEM_SLOT, "Ender-Modem-Modul")
   requireReservedChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")

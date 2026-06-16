@@ -142,11 +142,11 @@ while true do
     if not ok then
       log("Miner crash: "..tostring(err))
       sendStartupStatus("crashed", "crashed", err)
-      deleteMinerState()
+      log("Miner-State bleibt erhalten fuer Recovery/Resume.")
     else
       log("Miner beendet oder abgestuerzt ohne Lua-Fehler.")
       sendStartupStatus("stopped", "stopped", "Miner beendet ohne pcall-Fehler.")
-      deleteMinerState()
+      log("Miner-State bleibt erhalten fuer Recovery/Resume.")
     end
   else
     log("Kein Miner vorhanden. Warte.")
