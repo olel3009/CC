@@ -1704,7 +1704,7 @@ function applyAdminCommand(sender, cmd)
     if rr then recoveryRadius = math.max(1, math.floor(rr + 0.5)) end
 
     save()
-    log("Recovery-Koordinaten gesetzt: x="..tostring(recoveryX).." y="..tostring(recoveryY).." z="..tostring(recoveryZ).." radius="..tostring(recoveryRadius))
+    log("REC set x="..tostring(recoveryX).." y="..tostring(recoveryY).." z="..tostring(recoveryZ).." r="..tostring(recoveryRadius))
 
     if action == "recover" and goToRecoveryIfConfigured then
       goToRecoveryIfConfigured("Admin-Recovery", nil)
@@ -1721,7 +1721,7 @@ function applyAdminCommand(sender, cmd)
       minerState = "recovery"
       minerAlert = "missing_reserved_chest"
       sendStatus("missing_reserved_chest", false)
-      log("Admin-Befehl "..tostring(action).." abgelehnt: "..missingLabel.." fehlt in Slot "..missingSlot..". Fahre Recovery statt Mining-Bereich anzunehmen.")
+      log("REC chest fehlt: "..missingLabel.." s"..missingSlot.." cmd="..tostring(action))
 
       if goToRecoveryIfConfigured then
         goToRecoveryIfConfigured(missingLabel, missingSlot)
@@ -2883,14 +2883,30 @@ function goHorizontal(tx, tz, allowOutside, allowAboveTarget)
         face(1)
         while x < target do
           local remaining = target - x
+          if recoveryTravelMode then
+            log("REC E r="..remaining.." p="..x..","..y..","..z.." f="..fuel())
+            sleep(0.2)
+          end
           if not travelStep(remaining) then return false, "Weg nach Osten blockiert." end
+          if recoveryTravelMode then
+            log("REC E ok p="..x..","..y..","..z)
+            sleep(0.2)
+          end
           clean()
         end
       elseif x > target then
         face(3)
         while x > target do
           local remaining = x - target
+          if recoveryTravelMode then
+            log("REC W r="..remaining.." p="..x..","..y..","..z.." f="..fuel())
+            sleep(0.2)
+          end
           if not travelStep(remaining) then return false, "Weg nach Westen blockiert." end
+          if recoveryTravelMode then
+            log("REC W ok p="..x..","..y..","..z)
+            sleep(0.2)
+          end
           clean()
         end
       end
@@ -2899,14 +2915,30 @@ function goHorizontal(tx, tz, allowOutside, allowAboveTarget)
         face(2)
         while z < target do
           local remaining = target - z
+          if recoveryTravelMode then
+            log("REC S r="..remaining.." p="..x..","..y..","..z.." f="..fuel())
+            sleep(0.2)
+          end
           if not travelStep(remaining) then return false, "Weg nach Sueden blockiert." end
+          if recoveryTravelMode then
+            log("REC S ok p="..x..","..y..","..z)
+            sleep(0.2)
+          end
           clean()
         end
       elseif z > target then
         face(0)
         while z > target do
           local remaining = z - target
+          if recoveryTravelMode then
+            log("REC N r="..remaining.." p="..x..","..y..","..z.." f="..fuel())
+            sleep(0.2)
+          end
           if not travelStep(remaining) then return false, "Weg nach Norden blockiert." end
+          if recoveryTravelMode then
+            log("REC N ok p="..x..","..y..","..z)
+            sleep(0.2)
+          end
           clean()
         end
       end
@@ -3013,31 +3045,50 @@ goToRecoveryIfConfigured = function(reason, missingSlot)
   minerState = "recovery"
   minerAlert = "recovery_missing_chest"
   sendStatus("recovery_missing_chest", false)
-  log("Recovery wegen "..tostring(reason)..". Fehlender Slot="..tostring(missingSlot)..". Warte "..delay.."s, Zielslot Offset dx="..dx.." dz="..dz..".")
+  local function recoveryLog(msg)
+    log("REC "..msg.." p="..x..","..y..","..z.." h="..heading.." f="..fuel())
+  end
+
+  recoveryLog("start slot="..tostring(missingSlot).." ziel="..tx..","..ty..","..tz.." off="..dx..","..dz.." grund="..tostring(reason))
+  log("REC wait "..delay.."s")
   sleep(delay)
 
   recoveryTravelMode = true
+  save()
+  sleep(0.5)
 
   while y < ty do
+    recoveryLog("up ->"..ty)
+    sleep(0.25)
     up()
     clean()
+    recoveryLog("up ok")
+    sleep(0.25)
   end
 
   while y > ty do
+    recoveryLog("down ->"..ty)
+    sleep(0.25)
     down()
     clean()
+    recoveryLog("down ok")
+    sleep(0.25)
   end
 
+  recoveryLog("horiz ->"..tx..","..tz)
+  sendStatus("recovery_travel", false)
+  sleep(0.5)
   goHorizontal(tx, tz, true, true)
   recoveryTravelMode = false
 
   save()
-  log("Recovery-Punkt erreicht wegen fehlender Chest: "..tostring(reason).." Slot "..tostring(missingSlot)..". Ziel x="..tx.." y="..ty.." z="..tz)
+  recoveryLog("arrived slot="..tostring(missingSlot))
 
   while true do
     minerState = "recovery_wait"
     minerAlert = "recovery_arrived"
     sendStatus("recovery_arrived", false)
+    recoveryLog("wait admin")
     pollAdminCommands(COMMAND_WAIT)
     sleep(30)
   end
