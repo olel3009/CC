@@ -3392,9 +3392,29 @@ goToRecoveryIfConfigured = function(reason, missingSlot)
     minerState = "recovery_wait"
     minerAlert = "recovery_arrived"
     sendStatus("recovery_arrived", false)
-    recoveryLog("wait admin")
+    recoveryLog("wait admin/check chests")
+
+    local ready = reservedChestsReady()
+    if ready then
+      minerAlert = nil
+      minerState = "recovery_resume"
+      sendStatus("recovery_resume", false)
+      recoveryLog("chests ready, resume mining")
+
+      recoveryTravelMode = true
+      goHorizontal(mineCenterX, mineCenterZ, true, true)
+      recoveryTravelMode = false
+      save()
+
+      if miningLoop then
+        miningLoop()
+      end
+
+      return true
+    end
+
     pollAdminCommands(COMMAND_WAIT)
-    sleep(30)
+    sleep(5)
   end
 end
 
@@ -3897,6 +3917,10 @@ end
 
 function main()
   ensureStartupVersion()
+  if fs.exists(STATE) then
+    fs.delete(STATE)
+    log("Alter Miner-State geloescht: "..STATE)
+  end
   loadOrSetupState()
   log("Gestartet.")
   log("Position: x="..x.." y="..y.." z="..z.." heading="..heading)
