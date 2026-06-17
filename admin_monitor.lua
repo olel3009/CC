@@ -85,88 +85,82 @@ local function trimStatsLog(filePath)
 end
 
 local function appendStatsLog(id, message)
-  local path = findStatsDisk()
-
-  if not path then
-    diskAlert = nil
-    return
-  end
-
-  local filePath = fs.combine(path, "miner_stats.log")
-  local free = fs.getFreeSpace(path)
-
-  if free and free < DISK_MIN_FREE then
-    if not trimStatsLog(filePath) then
-      diskAlert = "DISK TRIM ERR"
-      return
-    end
-  end
-
-  free = fs.getFreeSpace(path)
-  if free and free < 512 then
-    diskAlert = "DISK FULL"
-    return
-  end
-
-  local f = fs.open(filePath, "a")
-
-  if not f then
-    if trimStatsLog(filePath) then
-      f = fs.open(filePath, "a")
-    end
-  end
-
-  if not f then
-    diskAlert = "DISK WRITE ERR"
-    return
-  end
-
-  f.writeLine(textutils.serialize({
-    t=now(),
-    id=id,
-    kind=message.kind,
-    state=message.state,
-    alert=message.alert,
-    x=message.x,
-    y=message.y,
-    z=message.z,
-    fuel=message.fuel,
-    fuelLimit=message.fuelLimit,
-    minedLastMinute=message.minedLastMinute,
-    minedLastMinuteTotal=message.minedLastMinuteTotal,
-    minedTotal=message.minedTotal,
-    miningMode=message.miningMode,
-    wantedOrePatterns=message.wantedOrePatterns,
-    normalLowestY=message.normalLowestY,
-    targetY=message.targetY
-  }))
-  f.close()
-
   diskAlert = nil
 end
 
 local function writeTable(path, data)
-  local f = fs.open(path, "w")
-  f.write(textutils.serialize(data))
-  f.close()
+  local tmpPath = path..".tmp"
+
+  if fs.exists(tmpPath) then
+    fs.delete(tmpPath)
+  end
+
+  local f = fs.open(tmpPath, "w")
+  if not f then
+    return false, "Kann Datei nicht schreiben: "..tostring(tmpPath)
+  end
+
+  local ok, err = pcall(function()
+    f.write(textutils.serialize(data))
+    f.close()
+  end)
+
+  if not ok then
+    pcall(function() f.close() end)
+    if fs.exists(tmpPath) then
+      fs.delete(tmpPath)
+    end
+    return false, err
+  end
+
+  if fs.exists(path) then
+    fs.delete(path)
+  end
+
+  fs.move(tmpPath, path)
+  return true
 end
 
 local function readTable(path)
   local f = fs.open(path, "r")
-  local data = textutils.unserialize(f.readAll())
-  f.close()
+  if not f then
+    return nil, "Kann Datei nicht lesen: "..tostring(path)
+  end
+
+  local ok, content = pcall(function()
+    local text = f.readAll()
+    f.close()
+    return text
+  end)
+
+  if not ok then
+    pcall(function() f.close() end)
+    return nil, content
+  end
+
+  local data = textutils.unserialize(content)
+  if data == nil then
+    return nil, "Datei enthaelt keine gueltigen Daten"
+  end
+
   return data
 end
 
 local function saveQueue()
-  writeTable(QUEUE_FILE, activeSends)
+  local ok, err = writeTable(QUEUE_FILE, activeSends)
+  if not ok then
+    log("Queue speichern fehlgeschlagen: "..tostring(err))
+  end
 end
 
 local function loadQueue()
   if not fs.exists(QUEUE_FILE) then return end
 
-  local data = readTable(QUEUE_FILE)
-  if type(data) ~= "table" then return end
+  local data, err = readTable(QUEUE_FILE)
+  if type(data) ~= "table" then
+    log("Queue laden fehlgeschlagen: "..tostring(err))
+    return
+  end
 
   local t = now()
   for _,entry in ipairs(data) do

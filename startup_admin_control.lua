@@ -2,6 +2,7 @@ local SCRIPT_URL = "https://raw.githubusercontent.com/olel3009/CC/main/admin_con
 local SCRIPT_FILE = "admin_control.lua"
 local UPDATE_FILE = "admin_control.lua.new"
 local BACKUP_FILE = "admin_control.lua.old"
+local MIN_SCRIPT_SIZE = 1000
 
 local function log(msg)
   print("[AdminControlStartup] "..msg)
@@ -13,6 +14,24 @@ local function downloadUrl()
   end
 
   return SCRIPT_URL
+end
+
+local function validateScript(path)
+  if not fs.exists(path) then
+    return false, "Datei fehlt"
+  end
+
+  local size = fs.getSize(path)
+  if size < MIN_SCRIPT_SIZE then
+    return false, "Datei zu klein: "..tostring(size).." Bytes"
+  end
+
+  local program, err = loadfile(path)
+  if not program then
+    return false, "Lua-Syntaxfehler: "..tostring(err)
+  end
+
+  return true
 end
 
 local function updateScript()
@@ -29,6 +48,13 @@ local function updateScript()
   local ok = shell.run("wget", url, UPDATE_FILE)
 
   if ok and fs.exists(UPDATE_FILE) then
+    local valid, err = validateScript(UPDATE_FILE)
+    if not valid then
+      log("Download ungueltig: "..tostring(err))
+      fs.delete(UPDATE_FILE)
+      return fs.exists(SCRIPT_FILE)
+    end
+
     if fs.exists(BACKUP_FILE) then
       fs.delete(BACKUP_FILE)
     end

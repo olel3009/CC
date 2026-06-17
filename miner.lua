@@ -183,18 +183,6 @@ end
 function debugLog(msg)
   local text = tostring(msg)
   print("[Miner] "..text)
-
-  pcall(function()
-    if fs.exists(DEBUG_LOG) and fs.getSize(DEBUG_LOG) > 30000 then
-      fs.delete(DEBUG_LOG)
-    end
-
-    local f = fs.open(DEBUG_LOG, "a")
-    if f then
-      f.writeLine(tostring(os.epoch("utc")).." "..text)
-      f.close()
-    end
-  end)
 end
 
 function writeTable(path, data)
@@ -1732,30 +1720,33 @@ function applyAdminCommand(sender, cmd)
   local tx = tonumber(commandValue(cmd, "x"))
   local ty = tonumber(commandValue(cmd, "y"))
   local tz = tonumber(commandValue(cmd, "z"))
-  if not tx then tx = tonumber(commandValue(cmd, "recoveryX")) end
-  if not ty then ty = tonumber(commandValue(cmd, "recoveryY")) end
-  if not tz then tz = tonumber(commandValue(cmd, "recoveryZ")) end
   if not tx then tx = tonumber(commandValue(cmd, "X")) end
   if not ty then ty = tonumber(commandValue(cmd, "Y")) end
   if not tz then tz = tonumber(commandValue(cmd, "Z")) end
-  local rr = tonumber(commandValue(cmd, "radius") or commandValue(cmd, "spread"))
+  local recoveryTx = tonumber(cmd.recoveryX)
+  local recoveryTy = tonumber(cmd.recoveryY)
+  local recoveryTz = tonumber(cmd.recoveryZ)
+  local rr = tonumber(cmd.recoveryRadius or cmd.radius or cmd.spread)
   local ax1 = areaValue(cmd, "x1", "minX", "fromX")
   local ax2 = areaValue(cmd, "x2", "maxX", "toX")
   local az1 = areaValue(cmd, "z1", "minZ", "fromZ")
   local az2 = areaValue(cmd, "z2", "maxZ", "toZ")
 
   if action == "set_recovery" or action == "recovery" or action == "recover" then
+    if not recoveryTx then recoveryTx = tx end
+    if not recoveryTy then recoveryTy = ty end
+    if not recoveryTz then recoveryTz = tz end
     debugLog("REC cmd raw x="..tostring(commandValue(cmd, "x")).." y="..tostring(commandValue(cmd, "y")).." z="..tostring(commandValue(cmd, "z")).." rx="..tostring(commandValue(cmd, "recoveryX")).." ry="..tostring(commandValue(cmd, "recoveryY")).." rz="..tostring(commandValue(cmd, "recoveryZ")).." r="..tostring(rr))
 
-    if not tx or not ty or not tz then
-      debugLog("REC set rejected missing coords tx="..tostring(tx).." ty="..tostring(ty).." tz="..tostring(tz))
+    if not recoveryTx or not recoveryTy or not recoveryTz then
+      debugLog("REC set rejected missing coords tx="..tostring(recoveryTx).." ty="..tostring(recoveryTy).." tz="..tostring(recoveryTz))
       sendStatus("command_error", false)
       return true
     end
 
-    if tx then recoveryX = math.floor(tx + 0.5) end
-    if ty then recoveryY = math.floor(ty + 0.5) end
-    if tz then recoveryZ = math.floor(tz + 0.5) end
+    if recoveryTx then recoveryX = math.floor(recoveryTx + 0.5) end
+    if recoveryTy then recoveryY = math.floor(recoveryTy + 0.5) end
+    if recoveryTz then recoveryZ = math.floor(recoveryTz + 0.5) end
     if rr then recoveryRadius = math.max(1, math.floor(rr + 0.5)) end
 
     save()
@@ -1767,6 +1758,15 @@ function applyAdminCommand(sender, cmd)
 
     sendStatus("command_ack", false)
     return true
+  end
+
+  if recoveryTx and recoveryTy and recoveryTz then
+    recoveryX = math.floor(recoveryTx + 0.5)
+    recoveryY = math.floor(recoveryTy + 0.5)
+    recoveryZ = math.floor(recoveryTz + 0.5)
+    if rr then recoveryRadius = math.max(1, math.floor(rr + 0.5)) end
+    save()
+    debugLog("REC embedded set x="..tostring(recoveryX).." y="..tostring(recoveryY).." z="..tostring(recoveryZ).." r="..tostring(recoveryRadius))
   end
 
   if commandNeedsReservedChests(action) then

@@ -19,18 +19,6 @@ end
 local function debugLog(msg)
   local text = tostring(msg)
   print("[Startup] "..text)
-
-  pcall(function()
-    if fs.exists(STARTUP_DEBUG_LOG) and fs.getSize(STARTUP_DEBUG_LOG) > 30000 then
-      fs.delete(STARTUP_DEBUG_LOG)
-    end
-
-    local f = fs.open(STARTUP_DEBUG_LOG, "a")
-    if f then
-      f.writeLine(tostring(os.epoch("utc")).." "..text)
-      f.close()
-    end
-  end)
 end
 
 local function computerId()
