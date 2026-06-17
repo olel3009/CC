@@ -677,7 +677,19 @@ function recoverFrontEnderChest(slot, label)
   local targetSlot = slot
 
   if turtle.getItemCount(targetSlot) > 0 then
-    targetSlot = findEmptySlot(1, WORK_SLOT_LAST) or findEmptySlot(1, 16)
+    local otherReservedSlot = nil
+
+    if slot == UNLOAD_CHEST_SLOT then
+      otherReservedSlot = FUEL_CHEST_SLOT
+    elseif slot == FUEL_CHEST_SLOT then
+      otherReservedSlot = UNLOAD_CHEST_SLOT
+    end
+
+    if otherReservedSlot and turtle.getItemCount(otherReservedSlot) == 0 then
+      targetSlot = otherReservedSlot
+    else
+      targetSlot = findEmptySlot(1, WORK_SLOT_LAST) or findEmptySlot(1, 16)
+    end
 
     if not targetSlot then
       stop(label.." vorne blockiert durch Ender-Chest, aber kein freier Slot zum Einsammeln: "..data.name)
@@ -2622,6 +2634,12 @@ function storeToBack()
   for i=1,WORK_SLOT_LAST do
     turtle.select(i)
     local item = turtle.getItemDetail()
+
+    if item and isReservedEnderChestItemName(item.name) then
+      log("Lager-Kiste ueberspringt reservierte Chest in Arbeitsslot "..i..": "..tostring(item.name))
+      item = nil
+    end
+
     if item and not isJunkItem(item.name) then
       local ok = turtle.drop()
       if not ok then
@@ -2845,6 +2863,11 @@ function unloadToEnderChest()
 
     while turtle.getItemCount(i) > 0 do
       local item = turtle.getItemDetail(i)
+
+      if item and isReservedEnderChestItemName(item.name) then
+        log("Entlade-Ender-Chest ueberspringt reservierte Chest in Arbeitsslot "..i..": "..tostring(item.name))
+        break
+      end
 
       if not item or isJunkItem(item.name) then
         turtle.drop()
