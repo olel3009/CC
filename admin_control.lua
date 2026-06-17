@@ -1,4 +1,5 @@
 local PROTOCOL = "miner_admin"
+local COMMAND_PROTOCOL = "miner_admin_cmd"
 local DEFAULT_DURATION = 90
 local SEND_EVERY = 2
 local QUEUE_FILE = "admin_command_queue"
@@ -170,6 +171,16 @@ local function queueCommand(message, duration)
   print("Befehl queued fuer "..duration.." Sekunden.")
 end
 
+local function sendCommand(targetRednetId, message)
+  if targetRednetId then
+    rednet.send(targetRednetId, message, COMMAND_PROTOCOL)
+    rednet.send(targetRednetId, message, PROTOCOL)
+  else
+    rednet.broadcast(message, COMMAND_PROTOCOL)
+    rednet.broadcast(message, PROTOCOL)
+  end
+end
+
 local function processActiveSends()
   local t = now()
   local kept = {}
@@ -188,12 +199,12 @@ local function processActiveSends()
           end
 
           if targetRednetId then
-            rednet.send(targetRednetId, message, PROTOCOL)
+            sendCommand(targetRednetId, message)
           else
-            rednet.broadcast(message, PROTOCOL)
+            sendCommand(nil, message)
           end
         else
-          rednet.broadcast(message, PROTOCOL)
+          sendCommand(nil, message)
         end
 
         if message.command == "set_recovery" or message.command == "recovery" or message.command == "recover" then

@@ -33,6 +33,7 @@ STATUS_INTERVAL = 120
 COMMAND_WAIT = 5
 COMMAND_POLL_MAX_PACKETS = 64
 ADMIN_PROTOCOL = "miner_admin"
+ADMIN_COMMAND_PROTOCOL = "miner_admin_cmd"
 MODEM_SLOT = 13
 UNLOAD_CHEST_SLOT = 15
 FUEL_CHEST_SLOT = 16
@@ -1864,10 +1865,12 @@ function pollAdminCommands(timeout)
       receiveTimeout = remainingMs / 1000
     end
 
-    local sender, message = rednet.receive(ADMIN_PROTOCOL, receiveTimeout)
+    local sender, message, protocol = rednet.receive(nil, receiveTimeout)
     if not sender or not message then break end
 
-    if applyAdminCommand(sender, message) then
+    if (protocol == ADMIN_COMMAND_PROTOCOL or protocol == ADMIN_PROTOCOL)
+        and not (type(message) == "table" and message.type == "miner_status")
+        and applyAdminCommand(sender, message) then
       applied = true
       break
     end
