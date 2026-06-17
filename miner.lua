@@ -31,6 +31,7 @@ MIN_START_DEPTH_BELOW_TOP = 20
 MAX_DISTANCE_FROM_SHAFT = 70
 STATUS_INTERVAL = 120
 COMMAND_WAIT = 5
+COMMAND_POLL_MAX_PACKETS = 64
 ADMIN_PROTOCOL = "miner_admin"
 MODEM_SLOT = 13
 UNLOAD_CHEST_SLOT = 15
@@ -1850,11 +1851,26 @@ end
 function pollAdminCommands(timeout)
   if not openWirelessModem() then return false end
 
-  local sender, message = rednet.receive(ADMIN_PROTOCOL, timeout or 0)
+  local waitSeconds = tonumber(timeout) or 0
+  local deadline = os.epoch("utc") + math.max(0, waitSeconds) * 1000
   local applied = false
 
-  if sender and message then
-    applied = applyAdminCommand(sender, message)
+  for _ = 1, COMMAND_POLL_MAX_PACKETS do
+    local receiveTimeout = 0
+
+    if waitSeconds > 0 then
+      local remainingMs = deadline - os.epoch("utc")
+      if remainingMs <= 0 then break end
+      receiveTimeout = remainingMs / 1000
+    end
+
+    local sender, message = rednet.receive(ADMIN_PROTOCOL, receiveTimeout)
+    if not sender or not message then break end
+
+    if applyAdminCommand(sender, message) then
+      applied = true
+      break
+    end
   end
 
   unequipEnderModem()
