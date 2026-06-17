@@ -2988,6 +2988,149 @@ function nearestOre()
   return best
 end
 
+function recoveryFuelAvailable()
+  local f = turtle.getFuelLevel()
+  return f == "unlimited" or (type(f) == "number" and f > 0)
+end
+
+function recoveryDigCanFail(inspectFn, detectFn, digFn, attackFn, label)
+  local tries = 0
+
+  while detectFn() do
+    local hasBlock, data = inspectFn()
+
+    if hasBlock and data and isProtectedBlock(data.name) then
+      log("Recovery: Geschuetzter Block "..label.." erkannt, wird nicht abgebaut: "..data.name)
+      return false
+    end
+
+    if digFn() then
+      tries = 0
+    else
+      tries = tries + 1
+      if attackFn then attackFn() end
+
+      if tries >= 8 then
+        local stillBlocked, blockedData = inspectFn()
+        if stillBlocked and blockedData then
+          log("Recovery: Block "..label.." nicht abbaubar: "..blockedData.name)
+        end
+        return false
+      end
+    end
+
+    sleep(0.05)
+  end
+
+  return true
+end
+
+function recoveryForward(entityAvoid)
+  if not recoveryFuelAvailable() then
+    log("Recovery: Kein Fuel fuer Vorwaertsbewegung.")
+    return false
+  end
+
+  if not recoveryDigCanFail(turtle.inspect, turtle.detect, turtle.dig, turtle.attack, "vorne") then
+    return false
+  end
+
+  local tries = 0
+
+  while not turtle.forward() do
+    if turtle.detect() then
+      turtle.attack()
+
+      if not recoveryDigCanFail(turtle.inspect, turtle.detect, turtle.dig, turtle.attack, "vorne") then
+        return false
+      end
+    else
+      if entityAvoid then
+        sleep(math.random(2, 8) / 10)
+        turtle.attack()
+      else
+        sleep(math.random(2, 8) / 10)
+      end
+    end
+
+    tries = tries + 1
+    if tries >= 12 then return false end
+    sleep(0.1)
+  end
+
+  updateForwardPosition()
+  save()
+  return true
+end
+
+function recoveryUp()
+  if not recoveryFuelAvailable() then
+    log("Recovery: Kein Fuel fuer Aufwaertsbewegung.")
+    return false
+  end
+
+  if not recoveryDigCanFail(turtle.inspectUp, turtle.detectUp, turtle.digUp, turtle.attackUp, "oben") then
+    return false
+  end
+
+  local tries = 0
+
+  while not turtle.up() do
+    if turtle.detectUp() then
+      turtle.attackUp()
+
+      if not recoveryDigCanFail(turtle.inspectUp, turtle.detectUp, turtle.digUp, turtle.attackUp, "oben") then
+        return false
+      end
+    else
+      turtle.attackUp()
+      sleep(math.random(2, 8) / 10)
+    end
+
+    tries = tries + 1
+    if tries >= 20 then return false end
+    sleep(0.05)
+  end
+
+  y = y + 1
+  save()
+  return true
+end
+
+function recoveryDown()
+  if not recoveryFuelAvailable() then
+    log("Recovery: Kein Fuel fuer Abwaertsbewegung.")
+    return false
+  end
+
+  if not recoveryDigCanFail(turtle.inspectDown, turtle.detectDown, turtle.digDown, turtle.attackDown, "unten") then
+    return false
+  end
+
+  local tries = 0
+
+  while not turtle.down() do
+    if turtle.detectDown() then
+      turtle.attackDown()
+
+      if not recoveryDigCanFail(turtle.inspectDown, turtle.detectDown, turtle.digDown, turtle.attackDown, "unten") then
+        return false
+      end
+    else
+      turtle.attackDown()
+      sleep(math.random(2, 8) / 10)
+    end
+
+    tries = tries + 1
+    if tries >= 20 then return false end
+    sleep(0.05)
+  end
+
+  y = y - 1
+  save()
+  return true
+end
+
 function goHorizontal(tx, tz, allowOutside, allowAboveTarget)
   if y > targetY and not allowAboveTarget then
     log("Seitliche Bewegung ueber Ziel-Y verhindert. Fahre zuerst runter zu Ziel-Y.")
@@ -3003,6 +3146,10 @@ function goHorizontal(tx, tz, allowOutside, allowAboveTarget)
 
   local function travelAxis(target, isX)
     local function travelStep(remaining)
+      if recoveryTravelMode then
+        return recoveryForward(true)
+      end
+
       if allowAboveTarget then
         return rawForward(true, true)
       end
@@ -3152,7 +3299,7 @@ function recoveryTargetForMiner()
     return nil
   end
 
-  local travelY = tonumber(y) or tonumber(recoveryY)
+  local travelY = tonumber(recoveryY)
   if travelY then
     travelY = math.floor(travelY + 0.5)
     if travelY > CONFIG_RECOVERY_MAX_TRAVEL_Y then
@@ -3202,7 +3349,9 @@ goToRecoveryIfConfigured = function(reason, missingSlot)
   while y < ty do
     recoveryLog("up ->"..tostring(ty))
     sleep(0.25)
-    up()
+    if not recoveryUp() then
+      error("Recovery-Aufstieg blockiert.")
+    end
     clean()
     recoveryLog("up ok")
     sleep(0.25)
@@ -3211,7 +3360,9 @@ goToRecoveryIfConfigured = function(reason, missingSlot)
   while y > ty do
     recoveryLog("down ->"..tostring(ty))
     sleep(0.25)
-    down()
+    if not recoveryDown() then
+      error("Recovery-Abstieg blockiert.")
+    end
     clean()
     recoveryLog("down ok")
     sleep(0.25)
