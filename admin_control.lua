@@ -7,6 +7,7 @@ local miners = {}
 local activeSends = {}
 local nextSeq = 1
 local selectedMinerId = nil
+local targetAll = true
 local listPage = 1
 local statusMessage = "Bereit."
 
@@ -243,8 +244,17 @@ local function selectedMiner()
 end
 
 local function commandTarget()
+  if targetAll then
+    return "all"
+  end
+
   local id = selectedMiner()
-  return id or "all"
+  if id then
+    return id
+  end
+
+  targetAll = true
+  return "all"
 end
 
 local function setStatus(msg)
@@ -479,7 +489,7 @@ local function drawUi()
   clearScreen()
 
   local w, h = term.getSize()
-  local header = "MINER CONTROL  Target="..tostring(commandTarget()).."  Queue="..tostring(#activeSends).."  Miner="..tostring(#sortedMinerIds())
+  local header = "MINER CONTROL  Ziel="..tostring(commandTarget()).."  Queue="..tostring(#activeSends).."  Miner="..tostring(#sortedMinerIds())
   fillLine(1, header)
 
   local leftW = math.max(28, math.floor(w * 0.44))
@@ -507,7 +517,7 @@ local function drawUi()
   if listPage < 1 then listPage = 1 end
   if listPage > pageCount then listPage = pageCount end
 
-  writeLineAt(3, 3, "Page "..listPage.."/"..pageCount.."  W/S Auswahl  A/D Seite")
+  writeLineAt(3, 3, "Page "..listPage.."/"..pageCount.."  W/S Cursor  A/D Seite")
 
   if #ids == 0 then
     writeLineAt(3, 5, "Keine Miner bekannt.")
@@ -557,7 +567,7 @@ local function drawUi()
   end
 
   writeLineAt(3, h - 3, "[1]Start [2]Unload [3]Refuel [4]Ores [5]Mine [6]SetRecovery [7]Recover")
-  writeLineAt(3, h - 2, "[0]Target=ALL  [Enter] Target=Selektiert  [R] Refresh  [Q] Ende")
+  writeLineAt(3, h - 2, "[0]Ziel=ALL  [Enter] Ziel=Cursor  [R] Refresh  [Q] Ende")
   writeLineAt(3, h - 1, "Status: "..statusMessage)
 end
 
@@ -612,8 +622,8 @@ local function uiLoop()
       elseif key == "r" then
         setStatus("Anzeige aktualisiert.")
       elseif key == "0" then
-        selectedMinerId = nil
-        setStatus("Target auf ALL gesetzt.")
+        targetAll = true
+        setStatus("Ziel auf ALL gesetzt.")
       elseif key == "1" then
         simpleCommand("start", commandTarget())
       elseif key == "2" then
@@ -643,8 +653,9 @@ local function uiLoop()
       elseif p1 == keys.enter then
         local id = selectedMiner()
         if id then
+          targetAll = false
           selectedMinerId = id
-          setStatus("Target auf #"..tostring(id).." gesetzt.")
+          setStatus("Ziel auf #"..tostring(id).." gesetzt.")
         end
       end
 

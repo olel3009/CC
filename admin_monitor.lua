@@ -15,6 +15,7 @@ local activeSends = {}
 local buttons = {}
 local rowTargets = {}
 local selectedMinerId = nil
+local targetAll = true
 local listPage = 1
 local monitor = nil
 local monitorSide = nil
@@ -206,6 +207,10 @@ end
 
 local function queueCommand(message, duration)
   duration = duration or DEFAULT_DURATION
+  if not message.targetId then
+    message.targetId = "all"
+  end
+
   message.seq = message.seq or nextSeq
   nextSeq = nextSeq + 1
 
@@ -228,7 +233,18 @@ local function processActiveSends()
         local message = entry.message
 
         if message.targetId and message.targetId ~= "all" and message.targetId ~= "*" then
-          rednet.send(message.targetId, message, PROTOCOL)
+          local targetRednetId = message.targetRednetId
+          local minerEntry = miners[message.targetId] or miners[tostring(message.targetId)] or miners[tonumber(message.targetId)]
+
+          if minerEntry and minerEntry.rednetId then
+            targetRednetId = minerEntry.rednetId
+          end
+
+          if targetRednetId then
+            rednet.send(targetRednetId, message, PROTOCOL)
+          else
+            rednet.broadcast(message, PROTOCOL)
+          end
         else
           rednet.broadcast(message, PROTOCOL)
         end
@@ -478,10 +494,15 @@ local function safeText(value, maxLen)
 end
 
 local function commandTarget()
+  if targetAll then
+    return "all"
+  end
+
   if selectedMinerId and miners[selectedMinerId] then
     return selectedMinerId
   end
 
+  targetAll = true
   return "all"
 end
 
@@ -635,7 +656,7 @@ local function drawMonitor()
   writeAt(monitor, bx, 3, "CMD "..safeText(commandScopeText(), buttonW - 4), colors.lightGray, colors.black)
 
   addButton("scope", commandTarget() == "all" and "TARGET ALL" or "TARGET SEL", bx, actionY, buttonW, 3, colors.blue, colors.white, function()
-    selectedMinerId = nil
+    targetAll = true
   end)
 
   addButton("start", "START "..commandScopeText(), bx, actionY + 4, buttonW, 3, colors.green, colors.black, function()
@@ -657,6 +678,7 @@ local function drawMonitor()
   addButton("clear", "CLEAR", bx, actionY + 20, buttonW, 3, colors.gray, colors.white, function()
     miners = {}
     selectedMinerId = nil
+    targetAll = true
     listPage = 1
   end)
 
@@ -834,6 +856,7 @@ local function monitorTouchLoop()
     if monitorSide == side then
       if rowTargets[y] then
         selectedMinerId = rowTargets[y]
+        targetAll = false
         drawMonitor()
       end
 
