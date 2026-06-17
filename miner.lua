@@ -1482,7 +1482,11 @@ function commandTargetsThisMiner(cmd)
   local id = computerId()
   local target = cmd.targetId or cmd.minerId or cmd.id
 
-  return target == nil or target == id or target == "all" or target == "*"
+  return target == nil
+    or target == id
+    or tostring(target) == tostring(id)
+    or target == "all"
+    or target == "*"
 end
 
 function commandValue(cmd, key)

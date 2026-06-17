@@ -179,7 +179,18 @@ local function processActiveSends()
         local message = entry.message
 
         if message.targetId and message.targetId ~= "all" and message.targetId ~= "*" then
-          rednet.send(message.targetId, message, PROTOCOL)
+          local targetRednetId = message.targetRednetId
+          local minerEntry = miners[message.targetId] or miners[tostring(message.targetId)] or miners[tonumber(message.targetId)]
+
+          if minerEntry and minerEntry.rednetId then
+            targetRednetId = minerEntry.rednetId
+          end
+
+          if targetRednetId then
+            rednet.send(targetRednetId, message, PROTOCOL)
+          else
+            rednet.broadcast(message, PROTOCOL)
+          end
         else
           rednet.broadcast(message, PROTOCOL)
         end
