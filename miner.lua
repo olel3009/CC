@@ -41,7 +41,6 @@ CONFIG_TOP_Y = 63
 CONFIG_LOWEST_Y = -50
 CONFIG_HIGHEST_NORMAL_TARGET_Y = 40
 CONFIG_NETHERITE_TARGET_Y = 15
-CONFIG_RECOVERY_MAX_TRAVEL_Y = 40
 CONFIG_HEADING = 0
 
 JUNK = {
@@ -3025,7 +3024,7 @@ function recoveryDigCanFail(inspectFn, detectFn, digFn, attackFn, label)
   return true
 end
 
-function recoveryForward(entityAvoid)
+function recoveryForwardDirect(entityAvoid)
   if not recoveryFuelAvailable() then
     log("Recovery: Kein Fuel fuer Vorwaertsbewegung.")
     return false
@@ -3061,6 +3060,20 @@ function recoveryForward(entityAvoid)
   updateForwardPosition()
   save()
   return true
+end
+
+function recoveryForward(entityAvoid)
+  if recoveryForwardDirect(entityAvoid) then
+    return true
+  end
+
+  log("Recovery: Vorwaerts blockiert. Weiche nach oben aus.")
+
+  if not recoveryUp() then
+    return false
+  end
+
+  return recoveryForwardDirect(entityAvoid)
 end
 
 function recoveryUp()
@@ -3302,9 +3315,6 @@ function recoveryTargetForMiner()
   local travelY = tonumber(recoveryY)
   if travelY then
     travelY = math.floor(travelY + 0.5)
-    if travelY > CONFIG_RECOVERY_MAX_TRAVEL_Y then
-      travelY = CONFIG_RECOVERY_MAX_TRAVEL_Y
-    end
   else
     travelY = recoveryY
   end
@@ -3346,6 +3356,11 @@ goToRecoveryIfConfigured = function(reason, missingSlot)
   save()
   sleep(0.5)
 
+  recoveryLog("horiz ->"..tostring(tx)..","..tostring(tz))
+  sendStatus("recovery_travel", false)
+  sleep(0.5)
+  goHorizontal(tx, tz, true, true)
+
   while y < ty do
     recoveryLog("up ->"..tostring(ty))
     sleep(0.25)
@@ -3368,10 +3383,6 @@ goToRecoveryIfConfigured = function(reason, missingSlot)
     sleep(0.25)
   end
 
-  recoveryLog("horiz ->"..tostring(tx)..","..tostring(tz))
-  sendStatus("recovery_travel", false)
-  sleep(0.5)
-  goHorizontal(tx, tz, true, true)
   recoveryTravelMode = false
 
   save()
