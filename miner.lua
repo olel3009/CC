@@ -173,6 +173,8 @@ minerAlert = nil
 lastCommand = nil
 lastCommandSeq = nil
 activePlacedReservedChestSlot = nil
+inRefuelFromEnderChest = false
+inUnloadToEnderChest = false
 goToRecoveryIfConfigured = nil
 fatalRecoveryHandler = nil
 inFatalRecovery = false
@@ -2222,6 +2224,11 @@ refuelFromEnderChestFull = nil
 
 function checkFuel()
   if fuel() < LOW_FUEL_STOP then
+    if inRefuelFromEnderChest then
+      log("Fuel niedrig, aber Refuel laeuft bereits. Verhindere verschachteltes Refuel.")
+      return
+    end
+
     if refuelFromEnderChestFull then
       refuelFromEnderChestFull()
       return
@@ -3047,135 +3054,186 @@ function tryRefuelFromReusableChest(slot, label)
   local emptyFuelRounds = 0
   local gainedFuel = false
 
-  while fuel() < fuelLimit() do
-    local before = fuel()
+  local ok, fueled, resultGainedFuel = pcall(function()
+    while fuel() < fuelLimit() do
+      local before = fuel()
 
-    for i=1,WORK_SLOT_LAST do
-      rescueWorkSlotReservedChest(i, label.." refuel")
-      turtle.select(i)
+      for i=1,WORK_SLOT_LAST do
+        rescueWorkSlotReservedChest(i, label.." refuel")
+        turtle.select(i)
 
-      while fuel() < fuelLimit() do
-        local got = turtle.suck(64)
-        if not got then break end
+        while fuel() < fuelLimit() do
+          local got = turtle.suck(64)
+          if not got then break end
 
-        if rescueWorkSlotReservedChest(i, label.." suck") then
-          break
-        end
-
-        if not turtle.refuel() then
-          if rescueWorkSlotReservedChest(i, label.." reject") then
+          if rescueWorkSlotReservedChest(i, label.." suck") then
             break
           end
 
-          turtle.drop()
-          break
+          if not turtle.refuel() then
+            if rescueWorkSlotReservedChest(i, label.." reject") then
+              break
+            end
+
+            turtle.drop()
+            break
+          end
+        end
+      end
+
+      if fuel() > before then
+        gainedFuel = true
+        emptyFuelRounds = 0
+      else
+        emptyFuelRounds = emptyFuelRounds + 1
+        log(label.." liefert gerade keinen Fuel. Versuch "..emptyFuelRounds.." / "..FUEL_CHEST_EMPTY_RETRIES..".")
+        minerAlert = "fuel_wait"
+        sendStatusWithReservedChest(slot, label, chestName, chestFingerprint, "fuel_wait", false)
+
+        if emptyFuelRounds >= FUEL_CHEST_EMPTY_RETRIES then
+          return false, gainedFuel
+        end
+
+        pollAdminCommands(COMMAND_WAIT)
+        sleep(10)
+
+        if fuel() < fuelLimit() then
+          chestName, chestFingerprint = placeReusableChest(slot, label)
         end
       end
     end
 
-    if fuel() > before then
-      gainedFuel = true
-      emptyFuelRounds = 0
-    else
-      emptyFuelRounds = emptyFuelRounds + 1
-      log(label.." liefert gerade keinen Fuel. Versuch "..emptyFuelRounds.." / "..FUEL_CHEST_EMPTY_RETRIES..".")
-      minerAlert = "fuel_wait"
-      sendStatusWithReservedChest(slot, label, chestName, chestFingerprint, "fuel_wait", false)
+    return true, gainedFuel
+  end)
 
-      if emptyFuelRounds >= FUEL_CHEST_EMPTY_RETRIES then
-        recoverReusableChest(slot, label, chestName, chestFingerprint)
-        return false, gainedFuel
-      end
+  local recoverOk, recoverErr = pcall(recoverReusableChest, slot, label, chestName, chestFingerprint)
 
-      pollAdminCommands(COMMAND_WAIT)
-      sleep(10)
-
-      if fuel() < fuelLimit() then
-        chestName, chestFingerprint = placeReusableChest(slot, label)
-      end
-    end
+  if not recoverOk then
+    error(recoverErr)
   end
 
-  recoverReusableChest(slot, label, chestName, chestFingerprint)
-  return true, gainedFuel
+  if not ok then
+    error(fueled)
+  end
+
+  return fueled, resultGainedFuel
 end
 
 function unloadToEnderChest()
-  clean()
-  protectReservedChests("unloadToEnderChest")
-  log("Entlade in wiederverwendbare Ender-Chest aus Slot "..UNLOAD_CHEST_SLOT..".")
-
-  local chestName, chestFingerprint = placeReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")
-
-  for i=1,WORK_SLOT_LAST do
-    rescueWorkSlotReservedChest(i, "unloadToEnderChest")
-    turtle.select(i)
-
-    while turtle.getItemCount(i) > 0 do
-      local item = turtle.getItemDetail(i)
-
-      if item and isReservedEnderChestItemName(item.name) then
-        rescueWorkSlotReservedChest(i, "unloadToEnderChest loop")
-        item = turtle.getItemDetail(i)
-        if item and isReservedEnderChestItemName(item.name) then
-          log("Entlade-Ender-Chest ueberspringt reservierte Chest in Arbeitsslot "..i..": "..tostring(item.name))
-          break
-        end
-      end
-
-      if not item or isJunkItem(item.name) then
-        turtle.drop()
-        break
-      end
-
-      if not turtle.drop() then
-        log("Entlade-Ender-Chest voll. Warte auf freien Platz.")
-        minerAlert = "unload_chest_full"
-        sendStatusWithReservedChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest", chestName, chestFingerprint, "unload_chest_full", false)
-        pollAdminCommands(COMMAND_WAIT)
-        sleep(10)
-        chestName, chestFingerprint = placeReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")
-      end
-    end
+  if inUnloadToEnderChest then
+    log("Entladen laeuft bereits. Ueberspringe verschachtelten Entlade-Aufruf.")
+    return
   end
 
-  recoverReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest", chestName, chestFingerprint)
+  inUnloadToEnderChest = true
+  local chestName, chestFingerprint = nil, nil
+
+  local ok, err = pcall(function()
+    clean()
+    protectReservedChests("unloadToEnderChest")
+    log("Entlade in wiederverwendbare Ender-Chest aus Slot "..UNLOAD_CHEST_SLOT..".")
+
+    chestName, chestFingerprint = placeReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")
+
+    for i=1,WORK_SLOT_LAST do
+      rescueWorkSlotReservedChest(i, "unloadToEnderChest")
+      turtle.select(i)
+
+      while turtle.getItemCount(i) > 0 do
+        local item = turtle.getItemDetail(i)
+
+        if item and isReservedEnderChestItemName(item.name) then
+          rescueWorkSlotReservedChest(i, "unloadToEnderChest loop")
+          item = turtle.getItemDetail(i)
+          if item and isReservedEnderChestItemName(item.name) then
+            log("Entlade-Ender-Chest ueberspringt reservierte Chest in Arbeitsslot "..i..": "..tostring(item.name))
+            break
+          end
+        end
+
+        if not item or isJunkItem(item.name) then
+          turtle.drop()
+          break
+        end
+
+        if not turtle.drop() then
+          log("Entlade-Ender-Chest voll. Warte auf freien Platz.")
+          minerAlert = "unload_chest_full"
+          sendStatusWithReservedChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest", chestName, chestFingerprint, "unload_chest_full", false)
+          pollAdminCommands(COMMAND_WAIT)
+          sleep(10)
+          chestName, chestFingerprint = placeReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")
+        end
+      end
+    end
+  end)
+
+  local recoverOk, recoverErr = true, nil
+
+  if chestName then
+    recoverOk, recoverErr = pcall(recoverReusableChest, UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest", chestName, chestFingerprint)
+  end
+
+  inUnloadToEnderChest = false
+
+  if not recoverOk then
+    error(recoverErr)
+  end
+
+  if not ok then
+    error(err)
+  end
+
   protectReservedChests("unloadToEnderChest done")
   clean()
 end
 
 refuelFromEnderChestFull = function()
   if fuel() >= fuelLimit() then return end
-
-  clean()
-  protectReservedChests("refuelFromEnderChestFull")
-
-  if inventoryFull() then
-    unloadToEnderChest()
+  if inRefuelFromEnderChest then
+    log("Refuel laeuft bereits. Verhindere verschachtelten Refuel-Aufruf.")
+    return
   end
 
-  local fueled, primaryGainedFuel = tryRefuelFromReusableChest(FUEL_CHEST_SLOT, "Fuel-Ender-Chest")
+  inRefuelFromEnderChest = true
 
-  if not fueled then
-    log("Fuel-Ender-Chest in Slot "..FUEL_CHEST_SLOT.." liefert nach "..FUEL_CHEST_EMPTY_RETRIES.." Versuchen nicht genug Fuel. Teste andere Ender-Chest in Slot "..UNLOAD_CHEST_SLOT..".")
-    minerAlert = "try_other_fuel_chest"
-    sendStatus("try_other_fuel_chest", false)
+  local ok, err = pcall(function()
+    clean()
+    protectReservedChests("refuelFromEnderChestFull")
 
-    local alternateFueled = tryRefuelFromReusableChest(UNLOAD_CHEST_SLOT, "Alternative-Fuel-Ender-Chest")
-
-    if alternateFueled then
-      if not primaryGainedFuel then
-        swapReservedChestSlots()
-      end
-    else
-      minerAlert = "wrong_fuel_chest"
-      sendStatus("wrong_fuel_chest", false)
-      stop("Keine Ender-Chest liefert genug Fuel nach je "..FUEL_CHEST_EMPTY_RETRIES.." Versuchen. Pruefe Slot "..FUEL_CHEST_SLOT.." und Slot "..UNLOAD_CHEST_SLOT..".")
+    if inventoryFull() then
+      unloadToEnderChest()
     end
-  end
 
-  minerAlert = nil
-  log("Turtle-Fuel voll: "..fuel().." / "..fuelLimit())
+    local fueled, primaryGainedFuel = tryRefuelFromReusableChest(FUEL_CHEST_SLOT, "Fuel-Ender-Chest")
+
+    if not fueled then
+      log("Fuel-Ender-Chest in Slot "..FUEL_CHEST_SLOT.." liefert nach "..FUEL_CHEST_EMPTY_RETRIES.." Versuchen nicht genug Fuel. Teste andere Ender-Chest in Slot "..UNLOAD_CHEST_SLOT..".")
+      minerAlert = "try_other_fuel_chest"
+      sendStatus("try_other_fuel_chest", false)
+
+      local alternateFueled = tryRefuelFromReusableChest(UNLOAD_CHEST_SLOT, "Alternative-Fuel-Ender-Chest")
+
+      if alternateFueled then
+        if not primaryGainedFuel then
+          swapReservedChestSlots()
+        end
+      else
+        minerAlert = "wrong_fuel_chest"
+        sendStatus("wrong_fuel_chest", false)
+        stop("Keine Ender-Chest liefert genug Fuel nach je "..FUEL_CHEST_EMPTY_RETRIES.." Versuchen. Pruefe Slot "..FUEL_CHEST_SLOT.." und Slot "..UNLOAD_CHEST_SLOT..".")
+      end
+    end
+
+    minerAlert = nil
+    log("Turtle-Fuel voll: "..fuel().." / "..fuelLimit())
+  end)
+
+  inRefuelFromEnderChest = false
+
+  if not ok then
+    error(err)
+  end
 end
 
 function scannerFuel()
