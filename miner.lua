@@ -41,6 +41,7 @@ CONFIG_TOP_Y = 63
 CONFIG_LOWEST_Y = -50
 CONFIG_HIGHEST_NORMAL_TARGET_Y = 40
 CONFIG_NETHERITE_TARGET_Y = 15
+CONFIG_RECOVERY_MAX_TRAVEL_Y = 40
 CONFIG_HEADING = 0
 
 JUNK = {
@@ -3151,6 +3152,16 @@ function recoveryTargetForMiner()
     return nil
   end
 
+  local travelY = tonumber(y) or tonumber(recoveryY)
+  if travelY then
+    travelY = math.floor(travelY + 0.5)
+    if travelY > CONFIG_RECOVERY_MAX_TRAVEL_Y then
+      travelY = CONFIG_RECOVERY_MAX_TRAVEL_Y
+    end
+  else
+    travelY = recoveryY
+  end
+
   local radius = math.max(1, tonumber(recoveryRadius) or 6)
   local side = radius * 2 + 1
   local capacity = side * side
@@ -3159,7 +3170,7 @@ function recoveryTargetForMiner()
   local dx = (index % side) - radius
   local dz = (math.floor(index / side) % side) - radius
 
-  return recoveryX + dx, recoveryY, recoveryZ + dz, dx, dz
+  return recoveryX + dx, travelY, recoveryZ + dz, dx, dz
 end
 
 goToRecoveryIfConfigured = function(reason, missingSlot)
