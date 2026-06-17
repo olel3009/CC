@@ -154,6 +154,8 @@ wantedOrePatterns = nil
 recoveryX, recoveryY, recoveryZ = nil, nil, nil
 recoveryRadius = 6
 recoveryTravelMode = false
+unloadChestFingerprint = nil
+fuelChestFingerprint = nil
 
 oreMinedCount = 0
 minedSinceStatus = {}
@@ -442,6 +444,64 @@ function isReservedEnderChestItemName(name)
   return isEnderChestItemName(name) or isEnderStorageName(name)
 end
 
+function detailedItem(slot)
+  local ok, item = pcall(function()
+    return turtle.getItemDetail(slot, true)
+  end)
+
+  if ok then return item end
+  return turtle.getItemDetail(slot)
+end
+
+function itemFingerprint(item)
+  if not item then return nil end
+  return tostring(item.name or "").."|"..tostring(item.nbt or "").."|"..tostring(item.displayName or "")
+end
+
+function reservedChestFingerprintForSlot(slot)
+  if slot == UNLOAD_CHEST_SLOT then return unloadChestFingerprint end
+  if slot == FUEL_CHEST_SLOT then return fuelChestFingerprint end
+  return nil
+end
+
+function setReservedChestFingerprint(slot, force)
+  local item = detailedItem(slot)
+
+  if not item or not isReservedEnderChestItemName(item.name) then
+    return nil
+  end
+
+  local fingerprint = itemFingerprint(item)
+  local existing = reservedChestFingerprintForSlot(slot)
+
+  if existing and existing ~= fingerprint and not force then
+    return existing
+  end
+
+  if slot == UNLOAD_CHEST_SLOT then
+    unloadChestFingerprint = fingerprint
+  elseif slot == FUEL_CHEST_SLOT then
+    fuelChestFingerprint = fingerprint
+  end
+
+  return fingerprint
+end
+
+function reservedChestMatchesSlot(slot, item)
+  if not item or not isReservedEnderChestItemName(item.name) then
+    return false
+  end
+
+  local fingerprint = reservedChestFingerprintForSlot(slot)
+  if not fingerprint then return true end
+  return itemFingerprint(item) == fingerprint
+end
+
+function refreshReservedChestFingerprints(force)
+  setReservedChestFingerprint(UNLOAD_CHEST_SLOT, force)
+  setReservedChestFingerprint(FUEL_CHEST_SLOT, force)
+end
+
 function refreshScanner()
   scanner = peripheral.find("geoScanner") or peripheral.find("geo_scanner")
   return scanner ~= nil
@@ -500,6 +560,63 @@ function moveMatchingItemToSlot(testFn, targetSlot, label)
   turtle.transferTo(targetSlot)
   log(label.." nach Slot "..targetSlot.." sortiert.")
   return true
+end
+
+function moveReservedChestToSlot(targetSlot, label)
+  local targetItem = detailedItem(targetSlot)
+
+  if reservedChestMatchesSlot(targetSlot, targetItem) then
+    setReservedChestFingerprint(targetSlot)
+    return true
+  end
+
+  if targetItem then
+    local emptySlot = nil
+
+    for i=1,16 do
+      if i ~= targetSlot and turtle.getItemCount(i) == 0 then
+        emptySlot = i
+        break
+      end
+    end
+
+    if emptySlot then
+      turtle.select(targetSlot)
+      turtle.transferTo(emptySlot)
+    end
+  end
+
+  if turtle.getItemCount(targetSlot) > 0 then
+    log("Kann "..label.." nicht nach Slot "..targetSlot.." sortieren: Zielslot ist belegt.")
+    return false
+  end
+
+  local fingerprint = reservedChestFingerprintForSlot(targetSlot)
+
+  for i=1,16 do
+    if i ~= targetSlot then
+      local item = detailedItem(i)
+      local matches = false
+
+      if item and isReservedEnderChestItemName(item.name) then
+        if fingerprint then
+          matches = itemFingerprint(item) == fingerprint
+        else
+          matches = true
+        end
+      end
+
+      if matches then
+        turtle.select(i)
+        turtle.transferTo(targetSlot)
+        setReservedChestFingerprint(targetSlot)
+        log(label.." nach Slot "..targetSlot.." sortiert.")
+        return true
+      end
+    end
+  end
+
+  return false
 end
 
 function equipItemFromSlot(slot, label)
@@ -660,11 +777,12 @@ function tryDigEnderChestHere(inspectFn, digFn, slot, label)
     return false
   end
 
-  if turtle.getItemCount(slot) > 0 then
+  if reservedChestMatchesSlot(slot, detailedItem(slot)) then
+    setReservedChestFingerprint(slot)
     return true
   end
 
-  return moveMatchingItemToSlot(isReservedEnderChestItemName, slot, label)
+  return moveReservedChestToSlot(slot, label)
 end
 
 function recoverFrontEnderChest(slot, label)
@@ -703,15 +821,16 @@ function recoverFrontEnderChest(slot, label)
     return false
   end
 
-  if turtle.getItemCount(targetSlot) > 0 then
+  if targetSlot == slot and reservedChestMatchesSlot(slot, detailedItem(targetSlot)) then
+    setReservedChestFingerprint(slot)
     return true
   end
 
-  return moveMatchingItemToSlot(isReservedEnderChestItemName, slot, label)
+  return moveReservedChestToSlot(slot, label)
 end
 
 function recoverAdjacentEnderChest(slot, label)
-  if moveMatchingItemToSlot(isReservedEnderChestItemName, slot, label) then
+  if moveReservedChestToSlot(slot, label) then
     return true
   end
 
@@ -1195,6 +1314,8 @@ save = function()
     recoveryY=recoveryY,
     recoveryZ=recoveryZ,
     recoveryRadius=recoveryRadius,
+    unloadChestFingerprint=unloadChestFingerprint,
+    fuelChestFingerprint=fuelChestFingerprint,
     adminId=adminId,
     adminStartReceived=adminStartReceived
   })
@@ -1284,6 +1405,7 @@ function setup()
 
   fuelHeading = heading
   storageHeading = (heading + 2) % 4
+  refreshReservedChestFingerprints(true)
 
   save()
 end
@@ -1317,6 +1439,8 @@ function loadOrSetupState()
       recoveryY=s.recoveryY
       recoveryZ=s.recoveryZ
       recoveryRadius=s.recoveryRadius or recoveryRadius
+      unloadChestFingerprint=s.unloadChestFingerprint
+      fuelChestFingerprint=s.fuelChestFingerprint
       adminId=s.adminId
       adminStartReceived = s.adminStartReceived ~= false
       log("Resume gefunden.")
@@ -1330,6 +1454,7 @@ function loadOrSetupState()
   end
 
   repairStartupEquipment()
+  refreshReservedChestFingerprints()
   ensureTargetY()
 end
 
@@ -1694,17 +1819,19 @@ function reservedChestsReady()
   recoverAdjacentEnderChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")
   recoverAdjacentEnderChest(FUEL_CHEST_SLOT, "Fuel-Ender-Chest")
 
-  local unloadItem = turtle.getItemDetail(UNLOAD_CHEST_SLOT)
-  local fuelItem = turtle.getItemDetail(FUEL_CHEST_SLOT)
+  local unloadItem = detailedItem(UNLOAD_CHEST_SLOT)
+  local fuelItem = detailedItem(FUEL_CHEST_SLOT)
 
-  if not unloadItem or not isReservedEnderChestItemName(unloadItem.name) then
+  if not reservedChestMatchesSlot(UNLOAD_CHEST_SLOT, unloadItem) then
     return false, UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest"
   end
 
-  if not fuelItem or not isReservedEnderChestItemName(fuelItem.name) then
+  if not reservedChestMatchesSlot(FUEL_CHEST_SLOT, fuelItem) then
     return false, FUEL_CHEST_SLOT, "Fuel-Ender-Chest"
   end
 
+  setReservedChestFingerprint(UNLOAD_CHEST_SLOT)
+  setReservedChestFingerprint(FUEL_CHEST_SLOT)
   return true
 end
 
@@ -2680,14 +2807,14 @@ function requireReservedChest(slot, label)
     end
   end
 
-  local item = turtle.getItemDetail(slot)
+  local item = detailedItem(slot)
 
-  if not item or not isReservedEnderChestItemName(item.name) then
+  if not reservedChestMatchesSlot(slot, item) then
     recoverAdjacentEnderChest(slot, label)
-    item = turtle.getItemDetail(slot)
+    item = detailedItem(slot)
   end
 
-  if not item or not isReservedEnderChestItemName(item.name) then
+  if not reservedChestMatchesSlot(slot, item) then
     if item then
       log(label.." Slot "..slot.." enthaelt: "..tostring(item.name).." x"..tostring(item.count))
     else
@@ -2707,11 +2834,13 @@ function requireReservedChest(slot, label)
     stop(label.." fehlt in Slot "..slot.." oder ist keine Ender-Chest.")
   end
 
+  setReservedChestFingerprint(slot)
   return item.name
 end
 
 function placeReusableChest(slot, label)
   local chestName = requireReservedChest(slot, label)
+  local chestFingerprint = setReservedChestFingerprint(slot)
   turtle.select(slot)
 
   while turtle.detect() do
@@ -2737,10 +2866,10 @@ function placeReusableChest(slot, label)
     sleep(5)
   end
 
-  return chestName
+  return chestName, chestFingerprint
 end
 
-function recoverReusableChest(slot, label, chestName)
+function recoverReusableChest(slot, label, chestName, chestFingerprint)
   turtle.select(slot)
 
   while turtle.detect() do
@@ -2762,22 +2891,34 @@ function recoverReusableChest(slot, label, chestName)
     sleep(5)
   end
 
-  if turtle.getItemCount(slot) > 0 then
+  local slotItem = detailedItem(slot)
+  if reservedChestMatchesSlot(slot, slotItem) then
+    setReservedChestFingerprint(slot)
     return
   end
 
   for i=1,WORK_SLOT_LAST do
-    local item = turtle.getItemDetail(i)
+    local item = detailedItem(i)
+    local matchesFingerprint = chestFingerprint and itemFingerprint(item) == chestFingerprint
 
-    if item and item.name == chestName then
+    if item and (matchesFingerprint or (not chestFingerprint and item.name == chestName)) then
       turtle.select(i)
       turtle.transferTo(slot)
       turtle.select(slot)
+      setReservedChestFingerprint(slot)
       return
     end
   end
 
   stop(label.." konnte nach dem Abbauen nicht in Slot "..slot.." wiedergefunden werden.")
+end
+
+function sendStatusWithReservedChest(slot, label, chestName, chestFingerprint, kind, resetMinute)
+  if turtle.getItemCount(slot) == 0 then
+    recoverReusableChest(slot, label, chestName, chestFingerprint)
+  end
+
+  return sendStatus(kind, resetMinute)
 end
 
 function swapReservedChestSlots()
@@ -2808,7 +2949,7 @@ end
 function tryRefuelFromReusableChest(slot, label)
   log("Tanke aus wiederverwendbarer "..label.." aus Slot "..slot..".")
 
-  local chestName = placeReusableChest(slot, label)
+  local chestName, chestFingerprint = placeReusableChest(slot, label)
   local emptyFuelRounds = 0
   local gainedFuel = false
 
@@ -2836,19 +2977,22 @@ function tryRefuelFromReusableChest(slot, label)
       emptyFuelRounds = emptyFuelRounds + 1
       log(label.." liefert gerade keinen Fuel. Versuch "..emptyFuelRounds.." / "..FUEL_CHEST_EMPTY_RETRIES..".")
       minerAlert = "fuel_wait"
-      sendStatus("fuel_wait", false)
+      sendStatusWithReservedChest(slot, label, chestName, chestFingerprint, "fuel_wait", false)
 
       if emptyFuelRounds >= FUEL_CHEST_EMPTY_RETRIES then
-        recoverReusableChest(slot, label, chestName)
         return false, gainedFuel
       end
 
       pollAdminCommands(COMMAND_WAIT)
       sleep(10)
+
+      if fuel() < fuelLimit() then
+        chestName, chestFingerprint = placeReusableChest(slot, label)
+      end
     end
   end
 
-  recoverReusableChest(slot, label, chestName)
+  recoverReusableChest(slot, label, chestName, chestFingerprint)
   return true, gainedFuel
 end
 
@@ -2856,7 +3000,7 @@ function unloadToEnderChest()
   clean()
   log("Entlade in wiederverwendbare Ender-Chest aus Slot "..UNLOAD_CHEST_SLOT..".")
 
-  local chestName = placeReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")
+  local chestName, chestFingerprint = placeReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")
 
   for i=1,WORK_SLOT_LAST do
     turtle.select(i)
@@ -2877,14 +3021,15 @@ function unloadToEnderChest()
       if not turtle.drop() then
         log("Entlade-Ender-Chest voll. Warte auf freien Platz.")
         minerAlert = "unload_chest_full"
-        sendStatus("unload_chest_full", false)
+        sendStatusWithReservedChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest", chestName, chestFingerprint, "unload_chest_full", false)
         pollAdminCommands(COMMAND_WAIT)
         sleep(10)
+        chestName, chestFingerprint = placeReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")
       end
     end
   end
 
-  recoverReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest", chestName)
+  recoverReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest", chestName, chestFingerprint)
   clean()
 end
 
