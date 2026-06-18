@@ -3021,11 +3021,26 @@ function sendStatusWithReservedChest(slot, label, chestName, chestFingerprint, k
   return sendStatus(kind, resetMinute)
 end
 
+function freeModemSlotForChestSort()
+  if turtle.getItemCount(MODEM_SLOT) == 0 then
+    return MODEM_SLOT
+  end
+
+  turtle.select(MODEM_SLOT)
+
+  if turtle.drop() then
+    log("Slot "..MODEM_SLOT.." fuer Chest-Umsortierung freigemacht.")
+    return MODEM_SLOT
+  end
+
+  return nil
+end
+
 function swapReservedChestSlots()
-  local tempSlot = findEmptySlot(1, WORK_SLOT_LAST)
+  local tempSlot = findEmptySlot(1, WORK_SLOT_LAST) or freeModemSlotForChestSort()
 
   if not tempSlot then
-    stop("Kann Ender-Chests nicht tauschen: kein freier Arbeitsslot.")
+    stop("Kann Ender-Chests nicht tauschen: kein freier Arbeitsslot und Slot "..MODEM_SLOT.." konnte nicht freigemacht werden.")
   end
 
   log("Fuel- und Entlade-Ender-Chest waren vertauscht. Tausche Slot "..UNLOAD_CHEST_SLOT.." und "..FUEL_CHEST_SLOT..".")
