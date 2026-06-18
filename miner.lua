@@ -3030,6 +3030,9 @@ function swapReservedChestSlots()
 
   log("Fuel- und Entlade-Ender-Chest waren vertauscht. Tausche Slot "..UNLOAD_CHEST_SLOT.." und "..FUEL_CHEST_SLOT..".")
 
+  local oldUnloadFingerprint = unloadChestFingerprint
+  local oldFuelFingerprint = fuelChestFingerprint
+
   turtle.select(UNLOAD_CHEST_SLOT)
   if not turtle.transferTo(tempSlot) then
     stop("Kann Entlade-Ender-Chest nicht in temporaeren Slot "..tempSlot.." verschieben.")
@@ -3044,6 +3047,34 @@ function swapReservedChestSlots()
   if not turtle.transferTo(FUEL_CHEST_SLOT) then
     stop("Kann echte Fuel-Ender-Chest nicht nach Slot "..FUEL_CHEST_SLOT.." verschieben.")
   end
+
+  unloadChestFingerprint = oldFuelFingerprint
+  fuelChestFingerprint = oldUnloadFingerprint
+  setReservedChestFingerprint(UNLOAD_CHEST_SLOT, true)
+  setReservedChestFingerprint(FUEL_CHEST_SLOT, true)
+  save()
+end
+
+function tryDropSlotToReusableChest(sourceSlot, chestSlot, label)
+  local chestName, chestFingerprint = placeReusableChest(chestSlot, label)
+  local dropped = false
+
+  local ok, err = pcall(function()
+    turtle.select(sourceSlot)
+    dropped = turtle.drop()
+  end)
+
+  local recoverOk, recoverErr = pcall(recoverReusableChest, chestSlot, label, chestName, chestFingerprint)
+
+  if not recoverOk then
+    error(recoverErr)
+  end
+
+  if not ok then
+    error(err)
+  end
+
+  return dropped
 end
 
 function tryRefuelFromReusableChest(slot, label)
@@ -3157,12 +3188,24 @@ function unloadToEnderChest()
         end
 
         if not turtle.drop() then
-          log("Entlade-Ender-Chest voll. Warte auf freien Platz.")
-          minerAlert = "unload_chest_full"
-          sendStatusWithReservedChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest", chestName, chestFingerprint, "unload_chest_full", false)
-          pollAdminCommands(COMMAND_WAIT)
-          sleep(10)
-          chestName, chestFingerprint = placeReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")
+          log("Entlade-Ender-Chest nimmt nichts an. Teste andere reservierte Chest als Entladeziel.")
+
+          recoverReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest", chestName, chestFingerprint)
+          chestName, chestFingerprint = nil, nil
+
+          if tryDropSlotToReusableChest(i, FUEL_CHEST_SLOT, "Alternative-Entlade-Ender-Chest") then
+            minerAlert = "wrong_unload_chest"
+            sendStatus("wrong_unload_chest", false)
+            swapReservedChestSlots()
+            chestName, chestFingerprint = placeReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")
+          else
+            log("Entlade-Ender-Chest voll. Warte auf freien Platz.")
+            minerAlert = "unload_chest_full"
+            sendStatus("unload_chest_full", false)
+            pollAdminCommands(COMMAND_WAIT)
+            sleep(10)
+            chestName, chestFingerprint = placeReusableChest(UNLOAD_CHEST_SLOT, "Entlade-Ender-Chest")
+          end
         end
       end
     end
@@ -3184,6 +3227,7 @@ function unloadToEnderChest()
     error(err)
   end
 
+  minerAlert = nil
   protectReservedChests("unloadToEnderChest done")
   clean()
 end
